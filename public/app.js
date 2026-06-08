@@ -72,6 +72,8 @@ const Desktop = (() => {
   async function init() {
     await createSession();
     connectSSE();
+    // Ping every 10 min to keep Render free-tier from spinning down
+    setInterval(() => fetch('/api/health').catch(() => {}), 10 * 60 * 1000);
   }
 
   async function createSession() {
