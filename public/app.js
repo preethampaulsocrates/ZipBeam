@@ -269,7 +269,8 @@ const Mobile = (() => {
   let pendingFiles = [];
 
   async function init(sid) {
-    sessionId = sid.toUpperCase();
+    const upper = sid.toUpperCase();
+    sessionId = upper.startsWith('SWIFT-') ? upper : 'SWIFT-' + upper;
     showState('mobile-connecting');
     try {
       const r = await fetch(`/api/sessions/${sessionId}`);
