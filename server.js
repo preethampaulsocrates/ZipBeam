@@ -170,9 +170,13 @@ const MIME_TYPES = {
 function serveStatic(res, filePath) {
   const ext  = path.extname(filePath).toLowerCase();
   const mime = MIME_TYPES[ext] || 'application/octet-stream';
+  // Prevent browsers from caching JS/HTML so deploys take effect immediately
+  const noCache = ext === '.js' || ext === '.html';
   try {
     const data = fs.readFileSync(filePath);
-    res.writeHead(200, { 'Content-Type': mime });
+    const headers = { 'Content-Type': mime };
+    if (noCache) headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
+    res.writeHead(200, headers);
     res.end(data);
   } catch {
     serveStatic(res, path.join(PUBLIC_DIR, 'index.html'));
