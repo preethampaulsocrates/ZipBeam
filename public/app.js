@@ -140,23 +140,21 @@ const Desktop = (() => {
       removeFileFromUI(fileId);
     });
 
-    let sseErrorCount = 0;
+    let sseRecreating = false;
     eventSource.onerror = async () => {
-      sseErrorCount++;
-      // After several consecutive errors the server likely restarted (Render spin-up).
-      // Validate our session; if gone, create a fresh one.
-      if (sseErrorCount >= 3) {
-        sseErrorCount = 0;
-        try {
-          const r = await fetch(`/api/sessions/${sessionId}`);
-          if (!r.ok) {
-            // Session lost — server restarted. Create a new one.
-            eventSource.close();
-            Toast.info('Reconnected — generating new session...');
-            await newSession();
-          }
-        } catch {}
-      }
+      if (sseRecreating) return;
+      sseRecreating = true;
+      // Wait briefly for SSE to attempt its own reconnect, then validate session.
+      await new Promise(r => setTimeout(r, 3000));
+      try {
+        const r = await fetch(`/api/sessions/${sessionId}`);
+        if (!r.ok) {
+          eventSource.close();
+          Toast.info('Reconnected — generating new session...');
+          await newSession();
+        }
+      } catch {}
+      sseRecreating = false;
     };
   }
 
@@ -272,13 +270,21 @@ const Mobile = (() => {
     const upper = sid.toUpperCase();
     sessionId = upper.startsWith('SWIFT-') ? upper : 'SWIFT-' + upper;
     showState('mobile-connecting');
-    try {
-      const r = await fetch(`/api/sessions/${sessionId}`);
-      const data = await r.json();
-      if (!r.ok || !data.valid) { showState('mobile-invalid'); return; }
-    } catch { showState('mobile-invalid'); return; }
-    document.getElementById('mobile-session-code').textContent = sessionId;
-    showState('mobile-upload');
+    // Retry for up to 20 seconds — gives desktop time to detect reconnect and recreate session
+    const deadline = Date.now() + 20000;
+    while (Date.now() < deadline) {
+      try {
+        const r = await fetch(`/api/sessions/${sessionId}`);
+        const data = await r.json();
+        if (r.ok && data.valid) {
+          document.getElementById('mobile-session-code').textContent = sessionId;
+          showState('mobile-upload');
+          return;
+        }
+      } catch {}
+      await new Promise(r => setTimeout(r, 3000));
+    }
+    showState('mobile-invalid');
   }
 
   function showState(id) {
