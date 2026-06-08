@@ -313,12 +313,6 @@ const server = http.createServer(async (req, res) => {
 
     const stream = fs.createReadStream(info.diskPath);
     stream.pipe(res);
-    stream.on('end', () => {
-      setTimeout(() => {
-        deleteFile(fileId);
-        sseEmit(info.sessionId, 'file:deleted', { fileId });
-      }, 500);
-    });
     stream.on('error', () => res.end());
     return;
   }

@@ -232,8 +232,6 @@ const Desktop = (() => {
       if (files[fileId]) files[fileId].downloaded = true;
       renderFiles();
       Toast.success(`Downloading ${filename}`);
-
-      setTimeout(() => { removeFileFromUI(fileId); Toast.show('File removed from server 🗑️'); }, 3000);
     } catch (err) {
       Toast.error('Download failed. Please try again.');
     }
