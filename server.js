@@ -15,24 +15,58 @@ const { EventEmitter } = require('events');
 const PORT        = process.env.PORT || 3000;
 const UPLOAD_DIR  = path.join(__dirname, 'uploads');
 const PUBLIC_DIR  = path.join(__dirname, 'public');
+const DATA_DIR    = path.join(__dirname, 'data');
 const SESSION_TTL = 30 * 60 * 1000; // 30 min
+const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
 
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+if (!fs.existsSync(DATA_DIR))   fs.mkdirSync(DATA_DIR,   { recursive: true });
 
 // ─── In-memory stores ─────────────────────────────────────────────────────────
-const sessions  = new Map(); // sessionId → { id, expiresAt, files:[] }
-const fileStore = new Map(); // fileId    → { id, sessionId, name, size, mime, diskPath, uploadedAt }
+const sessions   = new Map(); // sessionId → { id, expiresAt, files:[] }
+const fileStore  = new Map(); // fileId    → { id, sessionId, name, size, mime, diskPath, uploadedAt }
 const sseClients = new Map(); // sessionId → Set of res objects (desktop listeners)
+
+// ─── Session persistence ──────────────────────────────────────────────────────
+function saveSessions() {
+  try {
+    const data = { sessions: [], fileStore: [] };
+    for (const sess of sessions.values()) data.sessions.push(sess);
+    for (const info of fileStore.values()) data.fileStore.push(info);
+    fs.writeFileSync(SESSIONS_FILE, JSON.stringify(data));
+  } catch {}
+}
+
+function loadSessions() {
+  try {
+    if (!fs.existsSync(SESSIONS_FILE)) return;
+    const data = JSON.parse(fs.readFileSync(SESSIONS_FILE, 'utf8'));
+    const now = Date.now();
+    for (const sess of (data.sessions || [])) {
+      if (now < sess.expiresAt) sessions.set(sess.id, sess);
+    }
+    for (const info of (data.fileStore || [])) {
+      if (sessions.has(info.sessionId) && fs.existsSync(info.diskPath)) {
+        fileStore.set(info.id, info);
+      }
+    }
+  } catch {}
+}
+
+loadSessions();
 
 // ─── Cleanup expired sessions every 5 min ────────────────────────────────────
 setInterval(() => {
   const now = Date.now();
+  let changed = false;
   for (const [id, sess] of sessions) {
     if (now > sess.expiresAt) {
       for (const fid of sess.files) deleteFile(fid);
       sessions.delete(id);
+      changed = true;
     }
   }
+  if (changed) saveSessions();
 }, 5 * 60 * 1000);
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -50,6 +84,7 @@ function deleteFile(fileId) {
   fileStore.delete(fileId);
   const sess = sessions.get(info.sessionId);
   if (sess) sess.files = sess.files.filter(id => id !== fileId);
+  saveSessions();
 }
 
 function sseEmit(sessionId, event, data) {
@@ -185,6 +220,7 @@ const server = http.createServer(async (req, res) => {
     const sessionId = genSessionId();
     const expiresAt = Date.now() + SESSION_TTL;
     sessions.set(sessionId, { id: sessionId, expiresAt, files: [] });
+    saveSessions();
     return json(res, 200, { sessionId, expiresAt });
   }
 
@@ -245,6 +281,7 @@ const server = http.createServer(async (req, res) => {
       uploadedFiles.push({ id: fileId, name: part.filename, size: part.content.length, mimetype: part.mime, uploadedAt: info.uploadedAt });
     }
 
+    saveSessions();
     // Notify desktop via SSE
     sseEmit(sid, 'files:received', { files: uploadedFiles });
     return json(res, 200, { success: true, files: uploadedFiles });

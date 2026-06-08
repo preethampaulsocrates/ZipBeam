@@ -138,8 +138,23 @@ const Desktop = (() => {
       removeFileFromUI(fileId);
     });
 
-    eventSource.onerror = () => {
-      // SSE will auto-reconnect
+    let sseErrorCount = 0;
+    eventSource.onerror = async () => {
+      sseErrorCount++;
+      // After several consecutive errors the server likely restarted (Render spin-up).
+      // Validate our session; if gone, create a fresh one.
+      if (sseErrorCount >= 3) {
+        sseErrorCount = 0;
+        try {
+          const r = await fetch(`/api/sessions/${sessionId}`);
+          if (!r.ok) {
+            // Session lost — server restarted. Create a new one.
+            eventSource.close();
+            Toast.info('Reconnected — generating new session...');
+            await newSession();
+          }
+        } catch {}
+      }
     };
   }
 
