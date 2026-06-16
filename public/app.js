@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════
-   SwiftDrop — Frontend Application
+   SendThem — Frontend Application
    Uses: fetch + EventSource (SSE) — no dependencies needed
 ════════════════════════════════════════════════════════ */
 'use strict';
