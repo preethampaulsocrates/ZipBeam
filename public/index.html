@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="SwiftDrop — Instantly transfer files from your phone to your computer using a QR code. No app needed." />
-  <title>SwiftDrop — Instant File Transfer</title>
+  <meta name="description" content="SendThem — Instantly transfer files from your phone to your computer using a QR code. No app needed." />
+  <title>SendThem — Instant File Transfer</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -22,13 +22,17 @@
   <!-- NAV -->
   <nav class="navbar">
     <a href="/" class="logo">
-      <svg width="34" height="34" viewBox="0 0 34 34" fill="none">
+      <svg width="30" height="30" viewBox="0 0 34 34" fill="none">
         <rect width="34" height="34" rx="10" fill="url(#logo-grad)"/>
         <path d="M19 6L10 18h7.5L14 28 27 14h-7.5L19 6z" fill="white" stroke="rgba(255,255,255,0.4)" stroke-width="0.5" stroke-linejoin="round"/>
         <defs><linearGradient id="logo-grad" x1="0" y1="0" x2="34" y2="34"><stop stop-color="#4F46E5"/><stop offset="1" stop-color="#7C3AED"/></linearGradient></defs>
       </svg>
-      <span class="logo-text">SwiftDrop</span>
+      <span class="logo-text">SendThem</span>
     </a>
+    <div class="mii-badge" title="Made in India">
+      <span class="mii-flag">🇮🇳</span>
+      <span>Make in India</span>
+    </div>
     <div class="nav-center">
       <div class="connection-pill" id="connection-pill">
         <span class="status-dot" id="status-dot"></span>
@@ -43,12 +47,7 @@
 
   <!-- HERO -->
   <section class="hero">
-    <div class="hero-badge">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-      Instant wireless transfer
-    </div>
-    <h1 class="hero-title">Send files from<br><span class="gradient-text">phone to computer</span></h1>
-    <p class="hero-sub">Scan the QR code with any phone. No app, no account, no cables.</p>
+    <h1 class="hero-title">Send files from <span class="gradient-text">phone to computer</span></h1>
   </section>
 
   <!-- MAIN GRID -->
@@ -128,14 +127,14 @@
   <footer class="footer">
     <div class="footer-logo">
       <svg width="20" height="20" viewBox="0 0 34 34" fill="none"><rect width="34" height="34" rx="9" fill="url(#fl-grad)"/><path d="M19 6L10 18h7.5L14 28 27 14h-7.5L19 6z" fill="white"/><defs><linearGradient id="fl-grad" x1="0" y1="0" x2="34" y2="34"><stop stop-color="#4F46E5"/><stop offset="1" stop-color="#7C3AED"/></linearGradient></defs></svg>
-      <span>SwiftDrop</span>
+      <span>SendThem</span>
     </div>
     <div class="footer-links">
       <a href="#">Privacy Policy</a>
       <a href="#">Terms of Service</a>
       <a href="#">Contact</a>
     </div>
-    <p class="footer-copy">© 2025 SwiftDrop. All rights reserved.</p>
+    <p class="footer-copy">© 2025 SendThem. All rights reserved.</p>
   </footer>
 </div>
 
@@ -148,7 +147,11 @@
   <nav class="mobile-nav">
     <div class="logo">
       <svg width="28" height="28" viewBox="0 0 34 34" fill="none"><rect width="34" height="34" rx="9" fill="url(#ml-grad)"/><path d="M19 6L10 18h7.5L14 28 27 14h-7.5L19 6z" fill="white"/><defs><linearGradient id="ml-grad" x1="0" y1="0" x2="34" y2="34"><stop stop-color="#4F46E5"/><stop offset="1" stop-color="#7C3AED"/></linearGradient></defs></svg>
-      <span class="logo-text">SwiftDrop</span>
+      <span class="logo-text">SendThem</span>
+    </div>
+    <div class="mii-badge" title="Made in India">
+      <span class="mii-flag">🇮🇳</span>
+      <span>Make in India</span>
     </div>
   </nav>
 
@@ -170,6 +173,30 @@
       <p>This QR code is no longer valid. The desktop may have gone to sleep — please refresh the desktop page and scan the new QR code.</p>
     </div>
 
+    <!-- CHOICE STATE -->
+    <div id="mobile-choice" class="mobile-state" style="display:none">
+      <div class="mobile-session-pill">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        Connected · <strong id="mobile-session-code-choice">SWIFT-……</strong>
+      </div>
+
+      <h2 class="mobile-title">What would you like to do?</h2>
+      <p class="mobile-sub">Choose how to send your files</p>
+
+      <div class="choice-grid">
+        <button class="choice-card" onclick="Mobile.chooseSave()">
+          <div class="choice-icon">💾</div>
+          <h3>Save to Computer</h3>
+          <p>Send files to download and keep</p>
+        </button>
+        <button class="choice-card" onclick="Mobile.choosePrint()">
+          <div class="choice-icon">🖨️</div>
+          <h3>Send for Print</h3>
+          <p>Send files only to print — not saved</p>
+        </button>
+      </div>
+    </div>
+
     <!-- UPLOAD STATE -->
     <div id="mobile-upload" class="mobile-state" style="display:none">
       <div class="mobile-session-pill">
@@ -177,8 +204,9 @@
         Connected · <strong id="mobile-session-code">SWIFT-……</strong>
       </div>
 
-      <h2 class="mobile-title">Send Files</h2>
-      <p class="mobile-sub">Select files to transfer to the computer</p>
+      <button class="back-btn" onclick="Mobile.backToChoice()">← Back</button>
+      <h2 class="mobile-title" id="upload-title">Send Files</h2>
+      <p class="mobile-sub" id="upload-sub">Select files to transfer to the computer</p>
 
       <!-- Drop zone -->
       <label class="drop-zone" id="drop-zone" for="file-input" ondragover="Mobile.dragOver(event)" ondragleave="Mobile.dragLeave(event)" ondrop="Mobile.drop(event)">

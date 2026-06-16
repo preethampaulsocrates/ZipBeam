@@ -202,22 +202,33 @@ const Desktop = (() => {
     }
     empty.style.display = 'none'; list.style.display = 'flex';
 
-    list.innerHTML = fileArr.map(f => `
+    list.innerHTML = fileArr.map(f => {
+      const safeName = escHtml(f.name).replace(/'/g, "\\'");
+      let actionBtn;
+      if (f.purpose === 'print') {
+        actionBtn = f.downloaded
+          ? `<button class="btn-dl saved" disabled>✓ Printed</button>`
+          : `<button class="btn-dl btn-print" onclick="Desktop.printFile('${f.id}','${safeName}')">🖨️ Print</button>`;
+      } else {
+        actionBtn = f.downloaded
+          ? `<button class="btn-dl saved" disabled>✓ Saved</button>`
+          : `<button class="btn-dl" onclick="Desktop.downloadFile('${f.id}','${safeName}')">↓ Download</button>`;
+      }
+      return `
       <div class="file-item" id="fi-${f.id}">
         <div class="file-icon">${fileIcon(f.mimetype, f.name)}</div>
         <div class="file-info">
-          <div class="file-name">${escHtml(f.name)} ${f.isNew ? '<span class="new-tag">New</span>' : ''}</div>
+          <div class="file-name">${escHtml(f.name)} ${f.isNew ? '<span class="new-tag">New</span>' : ''} ${f.purpose === 'print' ? '<span class="print-tag">Print only</span>' : ''}</div>
           <div class="file-meta">
             <span>${fmtBytes(f.size)}</span>
             <span>${fmtTime(f.uploadedAt)}</span>
             <span class="type-tag">${fileTypeName(f.mimetype, f.name)}</span>
           </div>
         </div>
-        ${f.downloaded
-          ? `<button class="btn-dl saved" disabled>✓ Saved</button>`
-          : `<button class="btn-dl" onclick="Desktop.downloadFile('${f.id}','${escHtml(f.name).replace(/'/g,"\\'")}')">↓ Download</button>`}
+        ${actionBtn}
       </div>
-    `).join('');
+    `;
+    }).join('');
   }
 
   async function downloadFile(fileId, filename) {
@@ -234,6 +245,27 @@ const Desktop = (() => {
       Toast.success(`Downloading ${filename}`);
     } catch (err) {
       Toast.error('Download failed. Please try again.');
+    }
+  }
+
+  async function printFile(fileId, filename) {
+    try {
+      const res = await fetch(`/api/files/${fileId}/download`);
+      if (!res.ok) throw new Error('File not available');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const win = window.open(url, '_blank');
+      if (!win) { Toast.error('Please allow pop-ups to print'); return; }
+
+      const triggerPrint = () => { try { win.focus(); win.print(); } catch {} };
+      win.addEventListener('load', triggerPrint);
+      setTimeout(triggerPrint, 800); // fallback for PDFs that don't fire load reliably
+
+      if (files[fileId]) files[fileId].downloaded = true;
+      renderFiles();
+      Toast.success(`Opening ${filename} for printing`);
+    } catch (err) {
+      Toast.error('Could not open file for printing.');
     }
   }
 
@@ -256,13 +288,14 @@ const Desktop = (() => {
     }
   }
 
-  return { init, newSession, copyCode, downloadFile };
+  return { init, newSession, copyCode, downloadFile, printFile };
 })();
 
 // ─── Mobile Module ────────────────────────────────────────────────────────────
 const Mobile = (() => {
   let sessionId = null;
   let pendingFiles = [];
+  let purpose = 'save'; // 'save' or 'print'
 
   async function init(sid) {
     const upper = sid.toUpperCase();
@@ -276,7 +309,8 @@ const Mobile = (() => {
         const data = await r.json();
         if (r.ok && data.valid) {
           document.getElementById('mobile-session-code').textContent = sessionId;
-          showState('mobile-upload');
+          document.getElementById('mobile-session-code-choice').textContent = sessionId;
+          showState('mobile-choice');
           return;
         }
       } catch {}
@@ -286,10 +320,26 @@ const Mobile = (() => {
   }
 
   function showState(id) {
-    ['mobile-connecting','mobile-invalid','mobile-upload','mobile-success'].forEach(s => {
+    ['mobile-connecting','mobile-invalid','mobile-choice','mobile-upload','mobile-success'].forEach(s => {
       const el = document.getElementById(s);
       if (el) el.style.display = (s === id) ? 'flex' : 'none';
     });
+  }
+
+  function chooseSave()  { purpose = 'save';  applyPurposeUI(); showState('mobile-upload'); }
+  function choosePrint() { purpose = 'print'; applyPurposeUI(); showState('mobile-upload'); }
+  function backToChoice() { showState('mobile-choice'); }
+
+  function applyPurposeUI() {
+    const title = document.getElementById('upload-title');
+    const sub   = document.getElementById('upload-sub');
+    if (purpose === 'print') {
+      title.textContent = 'Send for Print';
+      sub.textContent = 'Select files — they will only be printed, not saved';
+    } else {
+      title.textContent = 'Save to Computer';
+      sub.textContent = 'Select files to transfer to the computer';
+    }
   }
 
   function dragOver(e)  { e.preventDefault(); document.getElementById('drop-zone').classList.add('drag-over'); }
@@ -342,6 +392,7 @@ const Mobile = (() => {
     renderPreviews();
 
     const formData = new FormData();
+    formData.append('purpose', purpose);
     pendingFiles.forEach(f => formData.append('files', f));
 
     try {
@@ -393,10 +444,10 @@ const Mobile = (() => {
     if (list) list.innerHTML = '';
     const btn = document.getElementById('send-btn');
     if (btn) { btn.disabled = true; btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Send Files'; }
-    showState('mobile-upload');
+    showState('mobile-choice');
   }
 
-  return { init, dragOver, dragLeave, drop, onFileSelect, removeFile, send, reset };
+  return { init, dragOver, dragLeave, drop, onFileSelect, removeFile, send, reset, chooseSave, choosePrint, backToChoice };
 })();
 
 // ─── Router (runs last, after modules defined) ────────────────────────────────

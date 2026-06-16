@@ -115,6 +115,7 @@ function readBody(req) {
 function parseMultipart(buffer, boundary) {
   const boundaryBuf = Buffer.from('--' + boundary);
   const files = [];
+  const fields = {};
   let pos = 0;
 
   while (pos < buffer.length) {
@@ -138,10 +139,6 @@ function parseMultipart(buffer, boundary) {
     // Find content-disposition
     const cdMatch = headerStr.match(/content-disposition:[^\r\n]*filename="([^"]+)"/i);
     const ctMatch = headerStr.match(/content-type:\s*([^\r\n]+)/i);
-    if (!cdMatch) continue; // skip non-file fields
-
-    const filename = cdMatch[1];
-    const mime     = ctMatch ? ctMatch[1].trim() : 'application/octet-stream';
 
     // Find end of this part
     const endBoundary = buffer.indexOf('\r\n' + '--' + boundary, pos);
@@ -150,9 +147,18 @@ function parseMultipart(buffer, boundary) {
     const content = buffer.slice(pos, endBoundary);
     pos = endBoundary;
 
+    if (!cdMatch) {
+      // Plain text field — capture its name and value
+      const nameMatch = headerStr.match(/name="([^"]+)"/i);
+      if (nameMatch) fields[nameMatch[1]] = content.toString('utf8');
+      continue;
+    }
+
+    const filename = cdMatch[1];
+    const mime     = ctMatch ? ctMatch[1].trim() : 'application/octet-stream';
     files.push({ filename, mime, content });
   }
-  return files;
+  return { files, fields };
 }
 
 // ─── Static file server ───────────────────────────────────────────────────────
@@ -253,7 +259,8 @@ const server = http.createServer(async (req, res) => {
     if (!boundaryMatch) return json(res, 400, { error: 'No boundary in content-type' });
 
     const body = await readBody(req);
-    const parts = parseMultipart(body, boundaryMatch[1]);
+    const { files: parts, fields } = parseMultipart(body, boundaryMatch[1]);
+    const purpose = fields.purpose === 'print' ? 'print' : 'save';
 
     if (parts.length === 0) return json(res, 400, { error: 'No files found' });
 
@@ -279,10 +286,11 @@ const server = http.createServer(async (req, res) => {
         mimetype: part.mime,
         diskPath,
         uploadedAt: Date.now(),
+        purpose,
       };
       fileStore.set(fileId, info);
       sess.files.push(fileId);
-      uploadedFiles.push({ id: fileId, name: part.filename, size: part.content.length, mimetype: part.mime, uploadedAt: info.uploadedAt });
+      uploadedFiles.push({ id: fileId, name: part.filename, size: part.content.length, mimetype: part.mime, uploadedAt: info.uploadedAt, purpose });
     }
 
     saveSessions();
