@@ -299,14 +299,13 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, { success: true, files: uploadedFiles });
   }
 
-  // ── API: Download file (blocked for print-only files) ──
+  // ── API: Download file ──
   const dlMatch = pathname.match(/^\/api\/files\/([a-f0-9]+)\/download$/i);
   if (method === 'GET' && dlMatch) {
     const fileId = dlMatch[1];
     const info   = fileStore.get(fileId);
     if (!info)                          return json(res, 404, { error: 'File not found' });
     if (!fs.existsSync(info.diskPath))  return json(res, 404, { error: 'File no longer available' });
-    if (info.purpose === 'print')       return json(res, 403, { error: 'This file is print-only and cannot be downloaded' });
 
     const sess = sessions.get(info.sessionId);
     if (!sess || Date.now() > sess.expiresAt) return json(res, 410, { error: 'Session expired' });
@@ -318,32 +317,6 @@ const server = http.createServer(async (req, res) => {
       'Content-Type':        info.mimetype || 'application/octet-stream',
       'Content-Disposition': `attachment; filename*=UTF-8''${encodedName}`,
       'Content-Length':      stat.size,
-    });
-
-    const stream = fs.createReadStream(info.diskPath);
-    stream.pipe(res);
-    stream.on('error', () => res.end());
-    return;
-  }
-
-  // ── API: Print-stream (no download header; blob URL revoked client-side immediately) ──
-  const psMatch = pathname.match(/^\/api\/files\/([a-f0-9]+)\/print-stream$/i);
-  if (method === 'GET' && psMatch) {
-    const fileId = psMatch[1];
-    const info   = fileStore.get(fileId);
-    if (!info)                          return json(res, 404, { error: 'File not found' });
-    if (!fs.existsSync(info.diskPath))  return json(res, 404, { error: 'File no longer available' });
-
-    const sess = sessions.get(info.sessionId);
-    if (!sess || Date.now() > sess.expiresAt) return json(res, 410, { error: 'Session expired' });
-
-    const stat = fs.statSync(info.diskPath);
-    res.writeHead(200, {
-      'Content-Type':           info.mimetype || 'application/octet-stream',
-      'Content-Length':         stat.size,
-      'Content-Disposition':    'inline',
-      'Cache-Control':          'no-store',
-      'X-Content-Type-Options': 'nosniff',
     });
 
     const stream = fs.createReadStream(info.diskPath);

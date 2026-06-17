@@ -250,41 +250,26 @@ const Desktop = (() => {
 
   async function printFile(fileId, filename) {
     try {
-      const res = await fetch(`/api/files/${fileId}/print-stream`);
+      const res = await fetch(`/api/files/${fileId}/download`);
       if (!res.ok) throw new Error('File not available');
       const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
 
-      let frameSrc;
-      if (blob.type.startsWith('image/')) {
-        // Render on canvas — disables right-click "Save image as"
-        const imgUrl = URL.createObjectURL(blob);
-        const html = `<!DOCTYPE html><html><head><style>
-          *{margin:0;padding:0;box-sizing:border-box;}
-          body{background:#fff;display:flex;justify-content:center;align-items:flex-start;padding:20px;}
-          canvas{max-width:100%;height:auto;}
-        </style></head><body><canvas id="c"></canvas><script>
-          var img=new Image();
-          img.onload=function(){
-            var c=document.getElementById('c');
-            c.width=img.naturalWidth;c.height=img.naturalHeight;
-            c.getContext('2d').drawImage(img,0,0);
-            URL.revokeObjectURL(img.src);
-          };
-          img.src="${imgUrl}";
-          document.addEventListener('contextmenu',function(e){e.preventDefault();});
-        <\/script></body></html>`;
-        frameSrc = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
-      } else {
-        frameSrc = URL.createObjectURL(blob);
-      }
-
-      const frame = document.getElementById('print-frame');
       const modal = document.getElementById('print-modal');
+      const frame = document.getElementById('print-frame');
       const nameEl = document.getElementById('print-modal-filename');
 
-      frame._frameSrc = frameSrc;
-      frame._fileId   = fileId;
-      frame.src       = frameSrc;
+      // For images, wrap in a minimal HTML page so we control the print layout
+      if (blob.type.startsWith('image/')) {
+        const html = `<!DOCTYPE html><html><head><style>*{margin:0;padding:0;box-sizing:border-box;}body{display:flex;justify-content:center;align-items:center;min-height:100vh;background:#fff;}img{max-width:100%;max-height:100vh;object-fit:contain;}</style></head><body><img src="${blobUrl}"></body></html>`;
+        const htmlBlob = new Blob([html], { type: 'text/html' });
+        frame.src = URL.createObjectURL(htmlBlob);
+      } else {
+        frame.src = blobUrl;
+      }
+
+      frame._blobUrl = blobUrl;
+      frame._fileId  = fileId;
       if (nameEl) nameEl.textContent = filename;
       modal.style.display = 'flex';
     } catch {
@@ -301,21 +286,20 @@ const Desktop = (() => {
       Toast.error('Print failed — browser blocked it.');
       return;
     }
-    // Revoke blob URL immediately — print spooler already has the content
-    if (frame._frameSrc) { URL.revokeObjectURL(frame._frameSrc); frame._frameSrc = null; }
+    // Mark as printed and close modal after a short delay
     const fileId = frame._fileId;
     if (fileId && files[fileId]) files[fileId].downloaded = true;
     renderFiles();
-    closePrintModal();
+    setTimeout(closePrintModal, 400);
   }
 
   function closePrintModal() {
     const modal = document.getElementById('print-modal');
     const frame = document.getElementById('print-frame');
-    if (frame._frameSrc) { URL.revokeObjectURL(frame._frameSrc); frame._frameSrc = null; }
-    frame.src      = '';
-    frame._fileId  = null;
     modal.style.display = 'none';
+    if (frame._blobUrl) { URL.revokeObjectURL(frame._blobUrl); frame._blobUrl = null; }
+    frame.src = '';
+    frame._fileId = null;
   }
 
   async function newSession() {
