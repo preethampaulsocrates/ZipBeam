@@ -171,6 +171,8 @@ const MIME_TYPES = {
   '.png':  'image/png',
   '.jpg':  'image/jpeg',
   '.json': 'application/json',
+  '.xml':  'application/xml',
+  '.txt':  'text/plain',
 };
 
 function serveStatic(res, filePath) {
