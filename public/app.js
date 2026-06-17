@@ -249,22 +249,19 @@ const Desktop = (() => {
   }
 
   async function printFile(fileId, filename) {
-    // Show a "Preparing…" toast — file is never displayed on screen
-    Toast.info('Preparing print job…');
     try {
       const res = await fetch(`/api/files/${fileId}/print-stream`);
       if (!res.ok) throw new Error('File not available');
       const blob = await res.blob();
 
-      // Build the iframe content without ever exposing a reusable URL
       let frameSrc;
       if (blob.type.startsWith('image/')) {
-        // Draw onto canvas so there is no <img> to right-click-save
+        // Render on canvas — disables right-click "Save image as"
         const imgUrl = URL.createObjectURL(blob);
         const html = `<!DOCTYPE html><html><head><style>
           *{margin:0;padding:0;box-sizing:border-box;}
-          body{background:#fff;display:flex;justify-content:center;align-items:center;min-height:100vh;}
-          canvas{max-width:100%;max-height:100vh;}
+          body{background:#fff;display:flex;justify-content:center;align-items:flex-start;padding:20px;}
+          canvas{max-width:100%;height:auto;}
         </style></head><body><canvas id="c"></canvas><script>
           var img=new Image();
           img.onload=function(){
@@ -281,36 +278,44 @@ const Desktop = (() => {
         frameSrc = URL.createObjectURL(blob);
       }
 
-      // Hidden iframe — user never sees the file
       const frame = document.getElementById('print-frame');
-      frame._fileId = fileId;
-      frame.src = frameSrc;
+      const modal = document.getElementById('print-modal');
+      const nameEl = document.getElementById('print-modal-filename');
 
-      frame.onload = () => {
-        try {
-          frame.contentWindow.focus();
-          frame.contentWindow.print();
-        } catch {
-          Toast.error('Print failed — browser blocked it.');
-        }
-        // Kill the URL immediately — blob is in print spooler already
-        URL.revokeObjectURL(frameSrc);
-        frame.src = '';
-
-        if (files[fileId]) files[fileId].downloaded = true;
-        renderFiles();
-        Toast.success(`Print dialog opened for ${filename}`);
-      };
+      frame._frameSrc = frameSrc;
+      frame._fileId   = fileId;
+      frame.src       = frameSrc;
+      if (nameEl) nameEl.textContent = filename;
+      modal.style.display = 'flex';
     } catch {
       Toast.error('Could not load file for printing.');
     }
   }
 
-  // Kept for backwards compat (modal close button calls these if still in DOM)
-  function triggerFramePrint() {}
+  function triggerFramePrint() {
+    const frame = document.getElementById('print-frame');
+    try {
+      frame.contentWindow.focus();
+      frame.contentWindow.print();
+    } catch {
+      Toast.error('Print failed — browser blocked it.');
+      return;
+    }
+    // Revoke blob URL immediately — print spooler already has the content
+    if (frame._frameSrc) { URL.revokeObjectURL(frame._frameSrc); frame._frameSrc = null; }
+    const fileId = frame._fileId;
+    if (fileId && files[fileId]) files[fileId].downloaded = true;
+    renderFiles();
+    closePrintModal();
+  }
+
   function closePrintModal() {
     const modal = document.getElementById('print-modal');
-    if (modal) modal.style.display = 'none';
+    const frame = document.getElementById('print-frame');
+    if (frame._frameSrc) { URL.revokeObjectURL(frame._frameSrc); frame._frameSrc = null; }
+    frame.src      = '';
+    frame._fileId  = null;
+    modal.style.display = 'none';
   }
 
   async function newSession() {
