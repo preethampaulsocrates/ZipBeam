@@ -1022,3 +1022,27 @@ body {
 }
 .btn-print-now:hover { opacity: 0.9; transform: translateY(-1px); }
 .btn-print-now:active { transform: translateY(0); }
+
+/* ─── Google Translate ────────────────────────────────── */
+#google-translate-el {
+  display: inline-flex;
+  align-items: center;
+}
+#google-translate-el .goog-te-gadget-simple {
+  background: transparent !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 8px !important;
+  padding: 5px 10px !important;
+  font-size: 13px !important;
+  font-family: inherit !important;
+  cursor: pointer;
+  color: var(--text) !important;
+}
+#google-translate-el .goog-te-gadget-simple span,
+#google-translate-el .goog-te-gadget-simple .goog-te-menu-value span {
+  color: var(--text) !important;
+  font-family: inherit !important;
+}
+#google-translate-el img { display: none !important; }
+.goog-te-banner-frame { display: none !important; }
+body { top: 0 !important; }

@@ -11,8 +11,20 @@
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap" rel="stylesheet" />
   <script src="/qrcode.min.js"></script>
   <link rel="stylesheet" href="/style.css" />
+  <script>
+    function googleTranslateElementInit() {
+      new google.translate.TranslateElement({
+        pageLanguage: 'en',
+        includedLanguages: 'hi,ta,te,kn,ml,bn,mr,gu,pa,or,ur,as,ne',
+        layout: google.translate.TranslateElement.InlineLayout.SIMPLE,
+        autoDisplay: false
+      }, 'google-translate-el');
+    }
+  </script>
+  <script src="https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit" async></script>
 </head>
 <body>
+<div id="google-translate-el" style="display:none"></div>
 
 <!-- ═══════════════════════════════════════════════════
      DESKTOP LAYOUT
@@ -39,6 +51,9 @@
         <span id="status-label">Waiting for device…</span>
       </div>
     </div>
+    <button class="btn-ghost lang-btn" onclick="document.getElementById('google-translate-el').style.display='block';this.style.display='none'" title="Translate">
+      🌐 Language
+    </button>
     <button class="btn-ghost" onclick="Desktop.newSession()">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
       New Session
@@ -177,6 +192,9 @@
       <span class="mii-flag">🇮🇳</span>
       <span>Make in India</span>
     </div>
+    <button class="btn-ghost lang-btn" onclick="document.getElementById('google-translate-el').style.display='block';this.style.display='none'" title="Translate">
+      🌐 Language
+    </button>
   </nav>
 
   <div class="mobile-content">
