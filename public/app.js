@@ -253,20 +253,53 @@ const Desktop = (() => {
       const res = await fetch(`/api/files/${fileId}/download`);
       if (!res.ok) throw new Error('File not available');
       const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const win = window.open(url, '_blank');
-      if (!win) { Toast.error('Please allow pop-ups to print'); return; }
+      const blobUrl = URL.createObjectURL(blob);
 
-      const triggerPrint = () => { try { win.focus(); win.print(); } catch {} };
-      win.addEventListener('load', triggerPrint);
-      setTimeout(triggerPrint, 800); // fallback for PDFs that don't fire load reliably
+      const modal = document.getElementById('print-modal');
+      const frame = document.getElementById('print-frame');
+      const nameEl = document.getElementById('print-modal-filename');
 
-      if (files[fileId]) files[fileId].downloaded = true;
-      renderFiles();
-      Toast.success(`Opening ${filename} for printing`);
-    } catch (err) {
-      Toast.error('Could not open file for printing.');
+      // For images, wrap in a minimal HTML page so we control the print layout
+      if (blob.type.startsWith('image/')) {
+        const html = `<!DOCTYPE html><html><head><style>*{margin:0;padding:0;box-sizing:border-box;}body{display:flex;justify-content:center;align-items:center;min-height:100vh;background:#fff;}img{max-width:100%;max-height:100vh;object-fit:contain;}</style></head><body><img src="${blobUrl}"></body></html>`;
+        const htmlBlob = new Blob([html], { type: 'text/html' });
+        frame.src = URL.createObjectURL(htmlBlob);
+      } else {
+        frame.src = blobUrl;
+      }
+
+      frame._blobUrl = blobUrl;
+      frame._fileId  = fileId;
+      if (nameEl) nameEl.textContent = filename;
+      modal.style.display = 'flex';
+    } catch {
+      Toast.error('Could not load file for printing.');
     }
+  }
+
+  function triggerFramePrint() {
+    const frame = document.getElementById('print-frame');
+    try {
+      frame.contentWindow.focus();
+      frame.contentWindow.print();
+    } catch {
+      Toast.error('Print failed — browser blocked it.');
+      return;
+    }
+    // Mark as printed and close modal after a short delay
+    const fileId = frame._fileId;
+    if (fileId && files[fileId]) files[fileId].downloaded = true;
+    renderFiles();
+    setTimeout(closePrintModal, 400);
+  }
+
+  function closePrintModal() {
+    const modal = document.getElementById('print-modal');
+    const frame = document.getElementById('print-frame');
+    modal.style.display = 'none';
+    if (frame._blobUrl) { URL.revokeObjectURL(frame._blobUrl); frame._blobUrl = null; }
+    frame.src = '';
+    frame._fileId = null;
   }
 
   async function newSession() {
@@ -288,7 +321,7 @@ const Desktop = (() => {
     }
   }
 
-  return { init, newSession, copyCode, downloadFile, printFile };
+  return { init, newSession, copyCode, downloadFile, printFile, triggerFramePrint, closePrintModal };
 })();
 
 // ─── Mobile Module ────────────────────────────────────────────────────────────
