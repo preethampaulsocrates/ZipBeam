@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin — SendThem</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'DM Sans', sans-serif; background: #0F172A; color: #E2E8F0; min-height: 100vh; }
+    a { color: inherit; text-decoration: none; }
+
+    .navbar {
+      display: flex; align-items: center; gap: 16px;
+      padding: 0 32px; height: 56px;
+      background: #1E293B; border-bottom: 1px solid #334155;
+    }
+    .logo { display: flex; align-items: center; gap: 8px; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 17px; }
+    .badge { background: #7C3AED22; color: #A78BFA; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 20px; border: 1px solid #7C3AED44; }
+    .spacer { flex: 1; }
+    .btn { background: #1E293B; border: 1px solid #334155; color: #94A3B8; border-radius: 8px; padding: 7px 14px; font-size: 13px; cursor: pointer; font-family: inherit; transition: all .15s; }
+    .btn:hover { border-color: #4F46E5; color: #E2E8F0; }
+
+    .main { max-width: 960px; margin: 0 auto; padding: 32px 24px; }
+    h1 { font-family: 'Syne', sans-serif; font-size: 24px; font-weight: 700; margin-bottom: 4px; }
+    .subtitle { color: #64748B; font-size: 14px; margin-bottom: 28px; }
+
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin-bottom: 32px; }
+    .stat-card { background: #1E293B; border: 1px solid #334155; border-radius: 12px; padding: 20px; }
+    .stat-value { font-size: 32px; font-weight: 700; font-family: 'Syne', sans-serif; color: #A78BFA; }
+    .stat-label { font-size: 13px; color: #64748B; margin-top: 4px; }
+
+    .section-title { font-size: 15px; font-weight: 600; margin-bottom: 12px; color: #CBD5E1; }
+    .table-wrap { background: #1E293B; border: 1px solid #334155; border-radius: 12px; overflow: hidden; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; padding: 12px 16px; font-size: 12px; font-weight: 600; color: #64748B; text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px solid #334155; background: #0F172A; }
+    td { padding: 13px 16px; font-size: 14px; border-bottom: 1px solid #1E293B; color: #CBD5E1; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #0F172A44; }
+    .role-admin { background: #7C3AED22; color: #A78BFA; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 20px; border: 1px solid #7C3AED55; }
+    .role-user  { background: #10B98122; color: #34D399; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 20px; border: 1px solid #10B98155; }
+    .empty { text-align: center; padding: 40px; color: #475569; }
+    #status { text-align: center; padding: 60px; color: #475569; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar">
+  <a href="/" class="logo">
+    <svg width="28" height="28" viewBox="0 0 34 34" fill="none"><rect width="34" height="34" rx="10" fill="url(#ag)"/><path d="M19 6L10 18h7.5L14 28 27 14h-7.5L19 6z" fill="white"/><defs><linearGradient id="ag" x1="0" y1="0" x2="34" y2="34"><stop stop-color="#4F46E5"/><stop offset="1" stop-color="#7C3AED"/></linearGradient></defs></svg>
+    SendThem
+  </a>
+  <span class="badge">Admin Panel</span>
+  <div class="spacer"></div>
+  <a href="/"><button class="btn">← Back to App</button></a>
+  <button class="btn" onclick="logout()">Sign Out</button>
+</nav>
+
+<div class="main">
+  <div id="status">Verifying access…</div>
+  <div id="content" style="display:none">
+    <h1>Admin Dashboard</h1>
+    <p class="subtitle" id="subtitle"></p>
+
+    <div class="stats">
+      <div class="stat-card">
+        <div class="stat-value" id="stat-total">—</div>
+        <div class="stat-label">Total Users</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-admins">—</div>
+        <div class="stat-label">Admins</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-today">—</div>
+        <div class="stat-label">Joined Today</div>
+      </div>
+    </div>
+
+    <p class="section-title">All Users</p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Role</th>
+            <th>Credits</th>
+            <th>Joined</th>
+          </tr>
+        </thead>
+        <tbody id="user-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+  async function logout() {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    window.location.href = '/';
+  }
+
+  function fmt(ts) {
+    return new Date(ts).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+
+  async function load() {
+    const meRes = await fetch('/api/auth/me');
+    if (!meRes.ok) { window.location.href = '/'; return; }
+    const { user } = await meRes.json();
+    if (user.role !== 'admin') { window.location.href = '/'; return; }
+
+    document.getElementById('status').style.display = 'none';
+    document.getElementById('content').style.display = 'block';
+    document.getElementById('subtitle').textContent = `Signed in as ${user.name} (${user.email})`;
+
+    const usersRes = await fetch('/api/admin/users');
+    const { users } = await usersRes.json();
+
+    const today = new Date().toDateString();
+    const todayCount = users.filter(u => new Date(u.createdAt).toDateString() === today).length;
+    const adminCount = users.filter(u => u.role === 'admin').length;
+
+    document.getElementById('stat-total').textContent  = users.length;
+    document.getElementById('stat-admins').textContent = adminCount;
+    document.getElementById('stat-today').textContent  = todayCount;
+
+    const tbody = document.getElementById('user-table-body');
+    if (users.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty">No users yet</td></tr>';
+      return;
+    }
+    tbody.innerHTML = users
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .map(u => `
+        <tr>
+          <td>${u.name}</td>
+          <td>${u.email}</td>
+          <td><span class="role-${u.role}">${u.role}</span></td>
+          <td>${u.credits.toLocaleString()}</td>
+          <td>${fmt(u.createdAt)}</td>
+        </tr>`)
+      .join('');
+  }
+
+  load();
+</script>
+</body>
+</html>

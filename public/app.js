@@ -483,15 +483,117 @@ const Mobile = (() => {
   return { init, dragOver, dragLeave, drop, onFileSelect, removeFile, send, reset, chooseSave, choosePrint, backToChoice };
 })();
 
+// ─── Auth Module ──────────────────────────────────────────────────────────────
+const Auth = (() => {
+  let currentUser = null;
+
+  function showTab(tab) {
+    document.getElementById('auth-login').style.display  = tab === 'login'  ? 'block' : 'none';
+    document.getElementById('auth-signup').style.display = tab === 'signup' ? 'block' : 'none';
+    document.getElementById('tab-login').classList.toggle('active',  tab === 'login');
+    document.getElementById('tab-signup').classList.toggle('active', tab === 'signup');
+    document.getElementById('login-error').textContent  = '';
+    document.getElementById('signup-error').textContent = '';
+  }
+
+  function showOverlay(tab) {
+    document.getElementById('auth-overlay').style.display = 'flex';
+    showTab(tab || 'login');
+  }
+
+  function hideOverlay() {
+    document.getElementById('auth-overlay').style.display = 'none';
+  }
+
+  function updateNavbar() {
+    const el = document.getElementById('nav-user');
+    if (!el || !currentUser) return;
+    el.innerHTML =
+      `<span class="nav-user-name">${escHtml(currentUser.name)}</span>` +
+      (currentUser.role === 'admin' ? `<a href="/admin" class="btn-ghost" style="font-size:13px">⚙️ Admin</a>` : '') +
+      `<button class="btn-ghost" style="font-size:13px" onclick="Auth.logout()">Sign Out</button>`;
+    el.style.display = 'flex';
+  }
+
+  async function check() {
+    try {
+      const r = await fetch('/api/auth/me');
+      if (r.ok) { const d = await r.json(); currentUser = d.user; return true; }
+    } catch {}
+    return false;
+  }
+
+  async function login() {
+    const email    = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-password').value;
+    const errEl    = document.getElementById('login-error');
+    errEl.textContent = '';
+    if (!email || !password) { errEl.textContent = 'Please fill in all fields'; return; }
+    try {
+      const r = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) });
+      const d = await r.json();
+      if (!r.ok) { errEl.textContent = d.error || 'Login failed'; return; }
+      currentUser = d.user;
+      hideOverlay();
+      updateNavbar();
+      document.getElementById('app-desktop').style.display = 'flex';
+      Desktop.init();
+    } catch { errEl.textContent = 'Network error — please try again'; }
+  }
+
+  async function signup() {
+    const name     = document.getElementById('signup-name').value.trim();
+    const email    = document.getElementById('signup-email').value.trim();
+    const password = document.getElementById('signup-password').value;
+    const errEl    = document.getElementById('signup-error');
+    errEl.textContent = '';
+    if (!name || !email || !password) { errEl.textContent = 'Please fill in all fields'; return; }
+    if (password.length < 8) { errEl.textContent = 'Password must be at least 8 characters'; return; }
+    try {
+      const r = await fetch('/api/auth/signup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, email, password }) });
+      const d = await r.json();
+      if (!r.ok) { errEl.textContent = d.error || 'Signup failed'; return; }
+      currentUser = d.user;
+      hideOverlay();
+      updateNavbar();
+      document.getElementById('app-desktop').style.display = 'flex';
+      Desktop.init();
+    } catch { errEl.textContent = 'Network error — please try again'; }
+  }
+
+  async function logout() {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    window.location.reload();
+  }
+
+  return { check, showTab, login, signup, logout };
+})();
+
 // ─── Router (runs last, after modules defined) ────────────────────────────────
-(function() {
+(async function() {
   const p = window.location.pathname;
   const m = p.match(/^\/s\/([A-Z0-9]+)$/i);
   if (m) {
+    // Mobile — no auth needed
     document.getElementById('app-mobile').style.display = 'flex';
     Mobile.init(m[1]);
   } else {
-    document.getElementById('app-desktop').style.display = 'flex';
-    Desktop.init();
+    // Desktop — check auth first
+    const loggedIn = await Auth.check();
+    if (loggedIn) {
+      const el = document.getElementById('nav-user');
+      const u  = await fetch('/api/auth/me').then(r => r.json());
+      if (el && u.user) {
+        el.innerHTML =
+          `<span class="nav-user-name">${escHtml(u.user.name)}</span>` +
+          (u.user.role === 'admin' ? `<a href="/admin" class="btn-ghost" style="font-size:13px">⚙️ Admin</a>` : '') +
+          `<button class="btn-ghost" style="font-size:13px" onclick="Auth.logout()">Sign Out</button>`;
+        el.style.display = 'flex';
+      }
+      document.getElementById('app-desktop').style.display = 'flex';
+      Desktop.init();
+    } else {
+      Auth.showOverlay('login');
+    }
   }
 })();

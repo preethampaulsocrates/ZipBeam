@@ -73,6 +73,54 @@
 <div id="google-translate-el" style="display:none"></div>
 
 <!-- ═══════════════════════════════════════════════════
+     AUTH OVERLAY
+════════════════════════════════════════════════════ -->
+<div id="auth-overlay" class="auth-overlay" style="display:none">
+  <div class="auth-box">
+    <div class="auth-logo">
+      <svg width="36" height="36" viewBox="0 0 34 34" fill="none"><rect width="34" height="34" rx="10" fill="url(#al-grad)"/><path d="M19 6L10 18h7.5L14 28 27 14h-7.5L19 6z" fill="white"/><defs><linearGradient id="al-grad" x1="0" y1="0" x2="34" y2="34"><stop stop-color="#4F46E5"/><stop offset="1" stop-color="#7C3AED"/></linearGradient></defs></svg>
+      <span>SendThem</span>
+    </div>
+
+    <div class="auth-tabs">
+      <button id="tab-login"  class="auth-tab active" onclick="Auth.showTab('login')">Log In</button>
+      <button id="tab-signup" class="auth-tab"         onclick="Auth.showTab('signup')">Sign Up</button>
+    </div>
+
+    <!-- Login form -->
+    <div id="auth-login">
+      <p class="auth-sub">Welcome back — sign in to continue</p>
+      <label class="auth-label">Email
+        <input id="login-email" type="email" class="auth-input" placeholder="you@example.com" autocomplete="email" />
+      </label>
+      <label class="auth-label">Password
+        <input id="login-password" type="password" class="auth-input" placeholder="Your password" autocomplete="current-password" />
+      </label>
+      <p id="login-error" class="auth-error"></p>
+      <button class="auth-submit" onclick="Auth.login()">Log In</button>
+      <p class="auth-switch">No account? <button class="auth-link" onclick="Auth.showTab('signup')">Sign up free</button></p>
+    </div>
+
+    <!-- Signup form -->
+    <div id="auth-signup" style="display:none">
+      <p class="auth-sub">Create your free account — takes 30 seconds</p>
+      <label class="auth-label">Name
+        <input id="signup-name" type="text" class="auth-input" placeholder="Your name" autocomplete="name" />
+      </label>
+      <label class="auth-label">Email
+        <input id="signup-email" type="email" class="auth-input" placeholder="you@example.com" autocomplete="email" />
+      </label>
+      <label class="auth-label">Password <span class="auth-hint">(min 8 characters)</span>
+        <input id="signup-password" type="password" class="auth-input" placeholder="Create a password" autocomplete="new-password" />
+      </label>
+      <p id="signup-error" class="auth-error"></p>
+      <button class="auth-submit" onclick="Auth.signup()">Create Account</button>
+      <p class="auth-switch">Already have an account? <button class="auth-link" onclick="Auth.showTab('login')">Log in</button></p>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
      DESKTOP LAYOUT
 ════════════════════════════════════════════════════ -->
 <div id="app-desktop" class="app-shell" style="display:none">
@@ -100,6 +148,7 @@
     <button class="btn-ghost lang-btn" onclick="document.getElementById('google-translate-el').style.display='block';this.style.display='none'" title="Translate">
       🌐 Language
     </button>
+    <div id="nav-user" class="nav-user" style="display:none"></div>
     <button class="btn-ghost" onclick="Desktop.newSession()">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
       New Session

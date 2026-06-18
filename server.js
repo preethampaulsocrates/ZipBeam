@@ -26,6 +26,87 @@ if (!fs.existsSync(DATA_DIR))   fs.mkdirSync(DATA_DIR,   { recursive: true });
 const sessions   = new Map(); // sessionId → { id, expiresAt, files:[] }
 const fileStore  = new Map(); // fileId    → { id, sessionId, name, size, mime, diskPath, uploadedAt }
 const sseClients = new Map(); // sessionId → Set of res objects (desktop listeners)
+const users      = new Map(); // userId    → { id, name, email, passwordHash, salt, role, credits, createdAt }
+const authTokens = new Map(); // token     → { userId, expiresAt }
+
+// ─── User / Auth persistence ──────────────────────────────────────────────────
+const USERS_FILE = path.join(DATA_DIR, 'users.json');
+const AUTH_FILE  = path.join(DATA_DIR, 'auth.json');
+const AUTH_TTL   = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+function saveUsers() {
+  try { fs.writeFileSync(USERS_FILE, JSON.stringify([...users.values()])); } catch {}
+}
+function loadUsers() {
+  try {
+    if (!fs.existsSync(USERS_FILE)) return;
+    for (const u of JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'))) users.set(u.id, u);
+  } catch {}
+}
+function saveAuthTokens() {
+  try { fs.writeFileSync(AUTH_FILE, JSON.stringify([...authTokens.entries()])); } catch {}
+}
+function loadAuthTokens() {
+  try {
+    if (!fs.existsSync(AUTH_FILE)) return;
+    const now = Date.now();
+    for (const [t, d] of JSON.parse(fs.readFileSync(AUTH_FILE, 'utf8'))) {
+      if (now < d.expiresAt) authTokens.set(t, d);
+    }
+  } catch {}
+}
+
+loadUsers();
+loadAuthTokens();
+
+function hashPw(pw, salt) {
+  return new Promise((res, rej) => {
+    const s = salt || crypto.randomBytes(16).toString('hex');
+    crypto.scrypt(pw, s, 64, (err, key) => err ? rej(err) : res({ hash: key.toString('hex'), salt: s }));
+  });
+}
+function verifyPw(pw, hash, salt) {
+  return new Promise((res, rej) => {
+    crypto.scrypt(pw, salt, 64, (err, key) => {
+      if (err) return rej(err);
+      try { res(crypto.timingSafeEqual(Buffer.from(key.toString('hex')), Buffer.from(hash))); } catch { res(false); }
+    });
+  });
+}
+function parseCookies(req) {
+  const out = {};
+  (req.headers.cookie || '').split(';').forEach(c => {
+    const [k, ...v] = c.trim().split('=');
+    if (k) out[k.trim()] = decodeURIComponent(v.join('='));
+  });
+  return out;
+}
+function getAuthUser(req) {
+  const token = parseCookies(req).st;
+  if (!token) return null;
+  const d = authTokens.get(token);
+  if (!d || Date.now() > d.expiresAt) return null;
+  return users.get(d.userId) || null;
+}
+function safeUser(u) {
+  return { id: u.id, name: u.name, email: u.email, role: u.role, credits: u.credits, createdAt: u.createdAt };
+}
+function authCookie(token) {
+  return `st=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(AUTH_TTL / 1000)}`;
+}
+
+async function ensureAdmin() {
+  const email = process.env.ADMIN_EMAIL;
+  const pw    = process.env.ADMIN_PASSWORD;
+  if (!email || !pw) return;
+  for (const u of users.values()) if (u.email.toLowerCase() === email.toLowerCase()) return;
+  const { hash, salt } = await hashPw(pw);
+  const admin = { id: crypto.randomBytes(8).toString('hex'), name: 'Admin', email: email.toLowerCase(), passwordHash: hash, salt, role: 'admin', credits: 999999, createdAt: Date.now() };
+  users.set(admin.id, admin);
+  saveUsers();
+  console.log(`  👤 Admin account ready: ${email}`);
+}
+ensureAdmin();
 
 // ─── Session persistence ──────────────────────────────────────────────────────
 function saveSessions() {
@@ -226,9 +307,76 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, { status: 'ok', sessions: sessions.size, uptime: process.uptime() });
   }
 
-  // ── API: Create session ──
+  // ── API: Auth — signup ──
+  if (method === 'POST' && pathname === '/api/auth/signup') {
+    if (!checkRateLimit(ip, 10, 60000)) return json(res, 429, { error: 'Too many requests' });
+    let body; try { body = JSON.parse((await readBody(req)).toString()); } catch { return json(res, 400, { error: 'Invalid JSON' }); }
+    const { name, email, password } = body;
+    if (!name || !email || !password) return json(res, 400, { error: 'Name, email and password are required' });
+    if (password.length < 8) return json(res, 400, { error: 'Password must be at least 8 characters' });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json(res, 400, { error: 'Invalid email address' });
+    for (const u of users.values()) {
+      if (u.email === email.toLowerCase().trim()) return json(res, 409, { error: 'Email already registered' });
+    }
+    const { hash, salt } = await hashPw(password);
+    const user = { id: crypto.randomBytes(8).toString('hex'), name: name.trim(), email: email.toLowerCase().trim(), passwordHash: hash, salt, role: 'user', credits: 200, createdAt: Date.now() };
+    users.set(user.id, user);
+    saveUsers();
+    const token = crypto.randomBytes(32).toString('hex');
+    authTokens.set(token, { userId: user.id, expiresAt: Date.now() + AUTH_TTL });
+    saveAuthTokens();
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Set-Cookie': authCookie(token), 'Access-Control-Allow-Origin': '*' });
+    return res.end(JSON.stringify({ user: safeUser(user) }));
+  }
+
+  // ── API: Auth — login ──
+  if (method === 'POST' && pathname === '/api/auth/login') {
+    if (!checkRateLimit(ip, 10, 60000)) return json(res, 429, { error: 'Too many requests' });
+    let body; try { body = JSON.parse((await readBody(req)).toString()); } catch { return json(res, 400, { error: 'Invalid JSON' }); }
+    const { email, password } = body;
+    if (!email || !password) return json(res, 400, { error: 'Email and password are required' });
+    let found = null;
+    for (const u of users.values()) if (u.email === email.toLowerCase().trim()) { found = u; break; }
+    if (!found || !(await verifyPw(password, found.passwordHash, found.salt))) return json(res, 401, { error: 'Invalid email or password' });
+    const token = crypto.randomBytes(32).toString('hex');
+    authTokens.set(token, { userId: found.id, expiresAt: Date.now() + AUTH_TTL });
+    saveAuthTokens();
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Set-Cookie': authCookie(token), 'Access-Control-Allow-Origin': '*' });
+    return res.end(JSON.stringify({ user: safeUser(found) }));
+  }
+
+  // ── API: Auth — logout ──
+  if (method === 'POST' && pathname === '/api/auth/logout') {
+    const token = parseCookies(req).st;
+    if (token) { authTokens.delete(token); saveAuthTokens(); }
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Set-Cookie': 'st=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0', 'Access-Control-Allow-Origin': '*' });
+    return res.end(JSON.stringify({ ok: true }));
+  }
+
+  // ── API: Auth — me ──
+  if (method === 'GET' && pathname === '/api/auth/me') {
+    const user = getAuthUser(req);
+    if (!user) return json(res, 401, { error: 'Not authenticated' });
+    return json(res, 200, { user: safeUser(user) });
+  }
+
+  // ── API: Admin — list users ──
+  if (method === 'GET' && pathname === '/api/admin/users') {
+    const user = getAuthUser(req);
+    if (!user || user.role !== 'admin') return json(res, 403, { error: 'Admin only' });
+    return json(res, 200, { users: [...users.values()].map(safeUser) });
+  }
+
+  // ── Admin page ──
+  if (method === 'GET' && pathname === '/admin') {
+    return serveStatic(res, path.join(PUBLIC_DIR, 'admin.html'));
+  }
+
+  // ── API: Create session (requires login) ──
   if (method === 'POST' && pathname === '/api/sessions') {
     if (!checkRateLimit(ip, 30, 60000)) return json(res, 429, { error: 'Too many requests' });
+    const user = getAuthUser(req);
+    if (!user) return json(res, 401, { error: 'Login required' });
     const sessionId = genSessionId();
     const expiresAt = Date.now() + SESSION_TTL;
     sessions.set(sessionId, { id: sessionId, expiresAt, files: [] });
@@ -266,14 +414,24 @@ const server = http.createServer(async (req, res) => {
 
     if (parts.length === 0) return json(res, 400, { error: 'No files found' });
 
-    const BLOCKED_EXTS = ['.exe','.bat','.cmd','.sh','.ps1','.msi','.dll','.vbs','.js','.jar'];
+    const BLOCKED_EXTS = new Set([
+      '.exe','.msi','.msp','.msix','.appx',        // Windows installers
+      '.apk','.xapk','.ipa',                        // Mobile apps
+      '.bat','.cmd','.ps1','.vbs','.vbe','.wsf','.hta', // Scripts
+      '.dll','.sys','.drv','.cpl','.ocx',           // System files
+      '.jar','.jnlp',                               // Java
+      '.deb','.rpm','.appimage',                    // Linux packages
+      '.dmg','.pkg',                                // macOS installers
+      '.iso','.img','.bin',                         // Disk images
+      '.lnk','.pif','.scr','.com','.reg','.inf',   // Shortcuts / registry
+    ]);
     const uploadedFiles = [];
     const sessDir = path.join(UPLOAD_DIR, sid);
     if (!fs.existsSync(sessDir)) fs.mkdirSync(sessDir, { recursive: true });
 
     for (const part of parts) {
       const ext = path.extname(part.filename).toLowerCase();
-      if (BLOCKED_EXTS.includes(ext)) continue; // skip dangerous
+      if (BLOCKED_EXTS.has(ext)) continue; // skip dangerous
 
       const fileId   = crypto.randomBytes(16).toString('hex');
       const diskName = `${fileId}${ext}`;
