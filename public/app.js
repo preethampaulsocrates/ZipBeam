@@ -566,7 +566,7 @@ const Auth = (() => {
     window.location.reload();
   }
 
-  return { check, showTab, login, signup, logout };
+  return { check, showTab, showOverlay, login, signup, logout };
 })();
 
 // ─── Router (runs last, after modules defined) ────────────────────────────────
