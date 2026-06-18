@@ -510,6 +510,7 @@ const Auth = (() => {
     if (!el || !currentUser) return;
     el.innerHTML =
       `<span class="nav-user-name">${escHtml(currentUser.name)}</span>` +
+      `<span class="nav-credits" title="Your credits">💎 ${currentUser.credits}</span>` +
       (currentUser.role === 'admin' ? `<a href="/admin" class="btn-ghost" style="font-size:13px">⚙️ Admin</a>` : '') +
       `<button class="btn-ghost" style="font-size:13px" onclick="Auth.logout()">Sign Out</button>`;
     el.style.display = 'flex';
@@ -586,6 +587,7 @@ const Auth = (() => {
       if (el && u.user) {
         el.innerHTML =
           `<span class="nav-user-name">${escHtml(u.user.name)}</span>` +
+          `<span class="nav-credits" title="Your credits">💎 ${u.user.credits}</span>` +
           (u.user.role === 'admin' ? `<a href="/admin" class="btn-ghost" style="font-size:13px">⚙️ Admin</a>` : '') +
           `<button class="btn-ghost" style="font-size:13px" onclick="Auth.logout()">Sign Out</button>`;
         el.style.display = 'flex';

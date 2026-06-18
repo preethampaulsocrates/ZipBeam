@@ -1273,3 +1273,5 @@ body { top: 0 !important; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.nav-credits { font-size: 13px; font-weight: 700; color: #7C3AED; background: #EDE9FE; border: 1px solid #DDD6FE; border-radius: 20px; padding: 3px 10px; white-space: nowrap; }
