@@ -76,12 +76,45 @@
      AUTH OVERLAY
 ════════════════════════════════════════════════════ -->
 <div id="auth-overlay" class="auth-overlay" style="display:none">
-  <div class="auth-box">
-    <div class="auth-logo">
-      <svg width="36" height="36" viewBox="0 0 34 34" fill="none"><rect width="34" height="34" rx="10" fill="url(#al-grad)"/><path d="M19 6L10 18h7.5L14 28 27 14h-7.5L19 6z" fill="white"/><defs><linearGradient id="al-grad" x1="0" y1="0" x2="34" y2="34"><stop stop-color="#4F46E5"/><stop offset="1" stop-color="#7C3AED"/></linearGradient></defs></svg>
-      <span>SendThem</span>
+
+  <!-- LEFT: Branding + Steps -->
+  <div class="auth-left">
+    <div class="auth-brand">
+      <svg width="42" height="42" viewBox="0 0 34 34" fill="none"><rect width="34" height="34" rx="10" fill="url(#al-grad)"/><path d="M19 6L10 18h7.5L14 28 27 14h-7.5L19 6z" fill="white"/><defs><linearGradient id="al-grad" x1="0" y1="0" x2="34" y2="34"><stop stop-color="#4F46E5"/><stop offset="1" stop-color="#7C3AED"/></linearGradient></defs></svg>
+      <span class="auth-brand-name">SendThem</span>
+    </div>
+    <h2 class="auth-tagline">Send files from your phone to your PC — instantly</h2>
+    <p class="auth-tagdesc">No cables. No apps. No Bluetooth. Just scan and send.</p>
+
+    <div class="auth-steps">
+      <div class="auth-step">
+        <div class="auth-step-num">1</div>
+        <div>
+          <strong>Scan the QR Code</strong>
+          <p>Open your phone camera and scan the code on your computer screen.</p>
+        </div>
+      </div>
+      <div class="auth-step">
+        <div class="auth-step-num">2</div>
+        <div>
+          <strong>Choose &amp; Send Files</strong>
+          <p>Pick any photo, video, or document from your phone and tap Send.</p>
+        </div>
+      </div>
+      <div class="auth-step">
+        <div class="auth-step-num">3</div>
+        <div>
+          <strong>Download or Print</strong>
+          <p>Files appear on your computer in seconds — save them or print directly.</p>
+        </div>
+      </div>
     </div>
 
+    <div class="auth-mii">🇮🇳 Make in India</div>
+  </div>
+
+  <!-- RIGHT: Auth form -->
+  <div class="auth-box">
     <div class="auth-tabs">
       <button id="tab-login"  class="auth-tab active" onclick="Auth.showTab('login')">Log In</button>
       <button id="tab-signup" class="auth-tab"         onclick="Auth.showTab('signup')">Sign Up</button>
@@ -103,7 +136,7 @@
 
     <!-- Signup form -->
     <div id="auth-signup" style="display:none">
-      <p class="auth-sub">Create your free account — takes 30 seconds</p>
+      <p class="auth-sub">Free account — get started in 30 seconds</p>
       <label class="auth-label">Name
         <input id="signup-name" type="text" class="auth-input" placeholder="Your name" autocomplete="name" />
       </label>
@@ -114,10 +147,11 @@
         <input id="signup-password" type="password" class="auth-input" placeholder="Create a password" autocomplete="new-password" />
       </label>
       <p id="signup-error" class="auth-error"></p>
-      <button class="auth-submit" onclick="Auth.signup()">Create Account</button>
+      <button class="auth-submit" onclick="Auth.signup()">Create Free Account</button>
       <p class="auth-switch">Already have an account? <button class="auth-link" onclick="Auth.showTab('login')">Log in</button></p>
     </div>
   </div>
+
 </div>
 
 <!-- ═══════════════════════════════════════════════════
