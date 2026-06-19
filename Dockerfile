@@ -1,11 +1,3 @@
-# ── Build stage ───────────────────────────────────────
-FROM node:22-alpine AS builder
-
-WORKDIR /app
-COPY package*.json ./
-RUN npm install --omit=dev
-
-# ── Production stage ───────────────────────────────────
 FROM node:22-alpine
 
 # Create non-root user for security
@@ -13,8 +5,7 @@ RUN addgroup -S swiftdrop && adduser -S swiftdrop -G swiftdrop
 
 WORKDIR /app
 
-# Copy app files
-COPY --from=builder /app/node_modules ./node_modules
+# Copy app files (zero npm dependencies — nothing to install)
 COPY --chown=swiftdrop:swiftdrop . .
 
 # Create uploads directory with correct permissions
