@@ -567,7 +567,7 @@ const Auth = (() => {
     window.location.reload();
   }
 
-  return { check, showTab, showOverlay, login, signup, logout };
+  return { check, showTab, showOverlay, hideOverlay, login, signup, logout };
 })();
 
 // ─── Router (runs last, after modules defined) ────────────────────────────────
@@ -579,11 +579,11 @@ const Auth = (() => {
     document.getElementById('app-mobile').style.display = 'flex';
     Mobile.init(m[1]);
   } else {
-    // Desktop — check auth first
+    // Desktop — open access, no login required. Show user info only if logged in.
+    const el = document.getElementById('nav-user');
     const loggedIn = await Auth.check();
     if (loggedIn) {
-      const el = document.getElementById('nav-user');
-      const u  = await fetch('/api/auth/me').then(r => r.json());
+      const u = await fetch('/api/auth/me').then(r => r.json());
       if (el && u.user) {
         el.innerHTML =
           `<span class="nav-user-name">${escHtml(u.user.name)}</span>` +
@@ -592,10 +592,11 @@ const Auth = (() => {
           `<button class="btn-ghost" style="font-size:13px" onclick="Auth.logout()">Sign Out</button>`;
         el.style.display = 'flex';
       }
-      document.getElementById('app-desktop').style.display = 'flex';
-      Desktop.init();
-    } else {
-      Auth.showOverlay('login');
+    } else if (el) {
+      el.innerHTML = `<button class="btn-ghost" style="font-size:13px" onclick="Auth.showOverlay('login')">Sign In</button>`;
+      el.style.display = 'flex';
     }
+    document.getElementById('app-desktop').style.display = 'flex';
+    Desktop.init();
   }
 })();

@@ -115,6 +115,7 @@
 
   <!-- RIGHT: Auth form -->
   <div class="auth-box">
+    <button class="auth-close" onclick="Auth.hideOverlay()" title="Continue without signing in">✕</button>
     <div class="auth-tabs">
       <button id="tab-login"  class="auth-tab active" onclick="Auth.showTab('login')">Log In</button>
       <button id="tab-signup" class="auth-tab"         onclick="Auth.showTab('signup')">Sign Up</button>
@@ -220,6 +221,12 @@
       <div class="timer-row">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
         Expires in <strong id="timer-display">30:00</strong>
+      </div>
+
+      <!-- Ad slot — replace with real ad unit once AdSense is approved -->
+      <div class="ad-banner">
+        <span class="ad-banner-label">Advertisement</span>
+        <span>Your ad could be here — SendThem is free, ads keep it that way</span>
       </div>
     </div>
 

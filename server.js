@@ -372,11 +372,9 @@ const server = http.createServer(async (req, res) => {
     return serveStatic(res, path.join(PUBLIC_DIR, 'admin.html'));
   }
 
-  // ── API: Create session (requires login) ──
+  // ── API: Create session (open — no login required) ──
   if (method === 'POST' && pathname === '/api/sessions') {
     if (!checkRateLimit(ip, 30, 60000)) return json(res, 429, { error: 'Too many requests' });
-    const user = getAuthUser(req);
-    if (!user) return json(res, 401, { error: 'Login required' });
     const sessionId = genSessionId();
     const expiresAt = Date.now() + SESSION_TTL;
     sessions.set(sessionId, { id: sessionId, expiresAt, files: [] });
