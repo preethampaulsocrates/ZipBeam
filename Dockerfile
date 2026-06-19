@@ -8,8 +8,9 @@ WORKDIR /app
 # Copy app files (zero npm dependencies — nothing to install)
 COPY --chown=swiftdrop:swiftdrop . .
 
-# Create uploads directory with correct permissions
-RUN mkdir -p uploads && chown swiftdrop:swiftdrop uploads
+# Create uploads/data directories and hand the whole app dir to swiftdrop,
+# since server.js creates these at runtime as the non-root user
+RUN mkdir -p uploads data && chown -R swiftdrop:swiftdrop /app
 
 USER swiftdrop
 
