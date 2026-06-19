@@ -7,28 +7,30 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --indigo: #4F46E5;
-  --violet: #7C3AED;
-  --cyan: #06B6D4;
+  --indigo: #6366F1;
+  --violet: #A855F7;
+  --cyan: #22D3EE;
+  --pink: #EC4899;
   --emerald: #10B981;
   --danger: #EF4444;
   --amber: #F59E0B;
-  --bg: #F8FAFC;
-  --text: #0F172A;
-  --card: #FFFFFF;
-  --gray-50: #F8FAFC;
-  --gray-100: #F1F5F9;
-  --gray-200: #E2E8F0;
-  --gray-300: #CBD5E1;
-  --gray-400: #94A3B8;
-  --gray-500: #64748B;
-  --gray-600: #475569;
-  --gray-700: #334155;
-  --grad: linear-gradient(135deg, var(--indigo), var(--violet));
-  --shadow-xs: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
-  --shadow-sm: 0 4px 16px rgba(79,70,229,0.08), 0 2px 8px rgba(0,0,0,0.05);
-  --shadow-md: 0 8px 32px rgba(79,70,229,0.12), 0 4px 12px rgba(0,0,0,0.06);
-  --shadow-lg: 0 20px 60px rgba(79,70,229,0.15), 0 8px 24px rgba(0,0,0,0.08);
+  /* Always-on futuristic dark theme (not tied to OS preference) */
+  --bg: #060818;
+  --text: #EEF2FF;
+  --card: #11142B;
+  --gray-50: #0C0E22;
+  --gray-100: #161A36;
+  --gray-200: #232849;
+  --gray-300: #343B66;
+  --gray-400: #7B85B8;
+  --gray-500: #9CA3D4;
+  --gray-600: #C2C7EC;
+  --gray-700: #DCE0FA;
+  --grad: linear-gradient(135deg, var(--cyan), var(--violet) 55%, var(--pink));
+  --shadow-xs: 0 1px 3px rgba(0,0,0,0.3);
+  --shadow-sm: 0 4px 20px rgba(99,102,241,0.18), 0 2px 8px rgba(0,0,0,0.3);
+  --shadow-md: 0 8px 36px rgba(168,85,247,0.22), 0 4px 14px rgba(0,0,0,0.35);
+  --shadow-lg: 0 24px 70px rgba(34,211,238,0.18), 0 8px 26px rgba(0,0,0,0.4);
   --radius-sm: 10px;
   --radius: 16px;
   --radius-lg: 22px;
@@ -36,25 +38,6 @@
   --font-head: 'Syne', system-ui, sans-serif;
   --font-body: 'DM Sans', system-ui, sans-serif;
   --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* Dark mode */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0B0F1A;
-    --text: #F1F5F9;
-    --card: #141927;
-    --gray-50: #0F1622;
-    --gray-100: #1A2236;
-    --gray-200: #243044;
-    --gray-300: #2E3D58;
-    --gray-400: #6B7DA8;
-    --gray-500: #8896B3;
-    --gray-600: #A8B4C8;
-    --shadow-sm: 0 4px 16px rgba(0,0,0,0.3);
-    --shadow-md: 0 8px 32px rgba(0,0,0,0.4);
-    --shadow-lg: 0 20px 60px rgba(0,0,0,0.5);
-  }
 }
 
 html { scroll-behavior: smooth; }
@@ -85,9 +68,9 @@ body {
   gap: 16px;
   padding: 0 40px;
   height: 56px;
-  background: rgba(248,250,252,0.85);
+  background: rgba(6,8,24,0.75);
   backdrop-filter: blur(24px) saturate(180%);
-  border-bottom: 1px solid rgba(79,70,229,0.07);
+  border-bottom: 1px solid rgba(168,85,247,0.18);
 }
 
 .mii-badge {
@@ -105,10 +88,6 @@ body {
   flex-shrink: 0;
 }
 .mii-flag { font-size: 14px; }
-
-@media (prefers-color-scheme: dark) {
-  .navbar { background: rgba(11,15,26,0.88); border-color: rgba(79,70,229,0.12); }
-}
 
 .logo {
   display: flex;
@@ -222,11 +201,12 @@ body {
 
 /* ─── Cards ───────────────────────────────────────────── */
 .card {
-  background: var(--card);
+  background: linear-gradient(160deg, rgba(22,26,54,0.9), rgba(13,15,38,0.85));
+  backdrop-filter: blur(20px);
   border-radius: var(--radius-lg);
   padding: 20px;
   box-shadow: var(--shadow-md);
-  border: 1px solid rgba(79,70,229,0.07);
+  border: 1px solid rgba(168,85,247,0.18);
   position: relative;
   overflow: hidden;
 }
@@ -235,7 +215,7 @@ body {
   position: absolute;
   top: 0; left: 0; right: 0;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(79,70,229,0.2), transparent);
+  background: linear-gradient(90deg, transparent, rgba(34,211,238,0.5), rgba(168,85,247,0.5), transparent);
 }
 
 .card-header {
@@ -262,12 +242,9 @@ body {
   justify-content: center;
   padding: 14px;
   border-radius: var(--radius);
-  background: var(--card);
+  background: #fff; /* must stay white/light for QR scanners to read it */
   margin-bottom: 12px;
-  border: 1.5px solid var(--gray-200);
-}
-@media (prefers-color-scheme: dark) {
-  .qr-frame { background: #fff; border-color: var(--gray-300); }
+  border: 1.5px solid var(--gray-300);
 }
 
 .qr-corners span {
@@ -880,9 +857,6 @@ body {
   animation: toastIn 0.35s cubic-bezier(0.175,0.885,0.32,1.275);
   max-width: 340px;
 }
-@media (prefers-color-scheme: dark) {
-  .toast { background: var(--gray-200); color: var(--text); }
-}
 .toast.success { background: var(--emerald); color: white; }
 .toast.error   { background: var(--danger);  color: white; }
 .toast.info    { background: var(--indigo);  color: white; }
@@ -1294,14 +1268,14 @@ body { top: 0 !important; }
 
 /* ─── Ad Banner (waiting screen) ──────────────────────── */
 .ad-banner {
-  background: #F8FAFC;
-  border: 1px dashed #CBD5E1;
+  background: rgba(34,211,238,0.04);
+  border: 1px dashed rgba(168,85,247,0.3);
   border-radius: 12px;
   padding: 14px 16px;
   margin-top: 14px;
   text-align: center;
   font-size: 12px;
-  color: #94A3B8;
+  color: var(--gray-400);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1312,49 +1286,89 @@ body { top: 0 !important; }
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #CBD5E1;
+  color: var(--cyan);
 }
 
 /* ═══════════════════════════════════════════════════════
    FUTURISTIC THEME — animated background, glow, tilt
 ════════════════════════════════════════════════════════ */
 
-/* Animated grid background behind the whole app */
+/* Base canvas — deep space gradient behind everything */
+body {
+  background: radial-gradient(ellipse 120% 80% at 50% -10%, #1a1545 0%, #060818 55%),
+              #060818;
+  background-attachment: fixed;
+}
+
+/* Animated neon grid background behind the whole app */
 .app-shell::before {
   content: '';
   position: fixed;
   inset: 0;
   z-index: -1;
   background-image:
-    linear-gradient(to right, rgba(79,70,229,0.06) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(79,70,229,0.06) 1px, transparent 1px);
-  background-size: 32px 32px;
-  mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 50%, transparent 100%);
-  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 50%, transparent 100%);
-  animation: gridDrift 30s linear infinite;
+    linear-gradient(to right, rgba(34,211,238,0.14) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(168,85,247,0.14) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: radial-gradient(ellipse 80% 65% at 50% 0%, #000 55%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 80% 65% at 50% 0%, #000 55%, transparent 100%);
+  animation: gridDrift 24s linear infinite;
 }
 @keyframes gridDrift {
   from { background-position: 0 0; }
-  to   { background-position: 64px 64px; }
+  to   { background-position: 80px 80px; }
 }
 
-/* Floating glow orbs */
+/* Floating neon glow orbs — three, different colors, drifting at different speeds */
 .app-shell::after {
   content: '';
   position: fixed;
-  top: -10%;
+  top: -15%;
   right: -10%;
-  width: 480px;
-  height: 480px;
-  background: radial-gradient(circle, rgba(124,58,237,0.12), transparent 70%);
+  width: 560px;
+  height: 560px;
+  background: radial-gradient(circle, rgba(168,85,247,0.28), transparent 70%);
   border-radius: 50%;
   z-index: -1;
-  animation: orbFloat 12s ease-in-out infinite;
+  animation: orbFloat 14s ease-in-out infinite;
   pointer-events: none;
+  filter: blur(10px);
+}
+.hero::before {
+  content: '';
+  position: fixed;
+  top: 20%;
+  left: -10%;
+  width: 420px;
+  height: 420px;
+  background: radial-gradient(circle, rgba(34,211,238,0.22), transparent 70%);
+  border-radius: 50%;
+  z-index: -1;
+  animation: orbFloat2 18s ease-in-out infinite;
+  pointer-events: none;
+  filter: blur(10px);
+}
+.hero::after {
+  content: '';
+  position: fixed;
+  bottom: -10%;
+  right: 20%;
+  width: 380px;
+  height: 380px;
+  background: radial-gradient(circle, rgba(236,72,153,0.16), transparent 70%);
+  border-radius: 50%;
+  z-index: -1;
+  animation: orbFloat 16s ease-in-out infinite reverse;
+  pointer-events: none;
+  filter: blur(10px);
 }
 @keyframes orbFloat {
   0%, 100% { transform: translate(0, 0) scale(1); }
-  50%      { transform: translate(-30px, 40px) scale(1.1); }
+  50%      { transform: translate(-40px, 50px) scale(1.15); }
+}
+@keyframes orbFloat2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%      { transform: translate(50px, -30px) scale(1.1); }
 }
 
 /* Hero entrance animation */
@@ -1378,30 +1392,30 @@ body { top: 0 !important; }
 
 .qr-frame {
   position: relative;
-  box-shadow: 0 0 0 0 rgba(79,70,229,0.3);
   animation: qrGlow 3s ease-in-out infinite;
 }
 @keyframes qrGlow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(79,70,229,0.18); }
-  50%      { box-shadow: 0 0 24px 4px rgba(124,58,237,0.18); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34,211,238,0.25), 0 0 0 0 rgba(168,85,247,0.2); }
+  50%      { box-shadow: 0 0 30px 6px rgba(34,211,238,0.35), 0 0 50px 14px rgba(168,85,247,0.22); }
 }
 .qr-corners span {
+  border-color: var(--cyan);
   animation: cornerPulse 2.4s ease-in-out infinite;
 }
 @keyframes cornerPulse {
-  0%, 100% { opacity: 0.6; }
-  50%      { opacity: 1; }
+  0%, 100% { opacity: 0.6; filter: drop-shadow(0 0 0 var(--cyan)); }
+  50%      { opacity: 1;   filter: drop-shadow(0 0 4px var(--cyan)); }
 }
 
-/* File cards — subtle 3D tilt + glow on hover */
+/* File cards — 3D tilt + neon glow on hover */
 .file-item {
   transform-style: preserve-3d;
   transition: transform 0.25s cubic-bezier(0.16,1,0.3,1), box-shadow 0.25s, border-color 0.25s, background 0.25s;
 }
 .file-item:hover {
-  transform: translateY(-3px) scale(1.01);
-  box-shadow: 0 8px 24px rgba(79,70,229,0.15);
-  border-color: rgba(124,58,237,0.35);
+  transform: translateY(-4px) scale(1.015);
+  box-shadow: 0 10px 30px rgba(168,85,247,0.25), 0 0 0 1px rgba(34,211,238,0.2);
+  border-color: rgba(168,85,247,0.45);
 }
 
 /* Logo pulse */
@@ -1409,8 +1423,8 @@ body { top: 0 !important; }
   animation: logoPulse 4s ease-in-out infinite;
 }
 @keyframes logoPulse {
-  0%, 100% { filter: drop-shadow(0 0 0 rgba(124,58,237,0)); }
-  50%      { filter: drop-shadow(0 0 6px rgba(124,58,237,0.45)); }
+  0%, 100% { filter: drop-shadow(0 0 0 rgba(34,211,238,0)); }
+  50%      { filter: drop-shadow(0 0 8px rgba(34,211,238,0.6)); }
 }
 
 /* Connection pill — animated gradient sweep when connected */
