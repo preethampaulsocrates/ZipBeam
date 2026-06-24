@@ -30,17 +30,19 @@
     .site-nav-links a:hover, .site-nav-links a.active { color: var(--cyan); }
 
     .contact-card {
-      background: linear-gradient(160deg, rgba(22,26,54,0.9), rgba(13,15,38,0.85));
-      backdrop-filter: blur(20px);
-      border: 1px solid rgba(168,85,247,0.18);
+      background: var(--card);
+      border: 1px solid rgba(79,70,229,0.12);
       border-radius: var(--radius-lg);
       padding: 18px 22px;
       margin-bottom: 14px;
       display: flex;
       align-items: center;
       gap: 12px;
+      box-shadow: var(--shadow-sm);
+      color: var(--text);
     }
-    .contact-card a { color: var(--text); font-weight: 600; font-size: 15px; }
+    .contact-card a { color: var(--indigo); font-weight: 600; font-size: 15px; text-decoration: none; }
+    .contact-card a:hover { text-decoration: underline; }
     .made-in-india {
       margin-top: 32px;
       text-align: center;
