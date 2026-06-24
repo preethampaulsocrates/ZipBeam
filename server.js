@@ -1,5 +1,5 @@
 /**
- * SwiftDrop — Zero-dependency Node.js server
+ * ZipBeam — Zero-dependency Node.js server
  * Uses: http, fs, path, crypto, events (all built-in)
  * Run: node server.js
  */
@@ -153,7 +153,7 @@ setInterval(() => {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function genSessionId() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let id = 'SWIFT-';
+  let id = 'ZIP-';
   for (let i = 0; i < 6; i++) id += chars[crypto.randomInt(chars.length)];
   return id;
 }
@@ -536,9 +536,9 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log('\n');
-  console.log('  ⚡ SwiftDrop is running!');
+  console.log('  ⚡ ZipBeam is running!');
   console.log(`  🌐 Open: http://localhost:${PORT}`);
-  console.log(`  📱 Mobile test: http://localhost:${PORT}/s/swift-test`);
+  console.log(`  📱 Mobile test: http://localhost:${PORT}/s/zip-test`);
   console.log('\n  Press Ctrl+C to stop\n');
 });
 

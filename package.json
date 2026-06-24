@@ -1,5 +1,5 @@
 {
-  "name": "swiftdrop",
+  "name": "zipbeam",
   "version": "1.0.0",
   "description": "Instant QR-based file transfer from phone to computer — zero npm dependencies",
   "main": "server.js",
@@ -8,7 +8,7 @@
     "dev": "node --watch server.js"
   },
   "keywords": ["file-transfer", "qr-code", "airdrop-alternative", "zero-dependency"],
-  "author": "SwiftDrop",
+  "author": "ZipBeam",
   "license": "MIT",
   "engines": { "node": ">=18.0.0" }
 }

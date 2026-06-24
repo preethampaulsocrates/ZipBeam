@@ -3,4 +3,4 @@ Allow: /
 Disallow: /api/
 Disallow: /uploads/
 
-Sitemap: https://sendthem.onrender.com/sitemap.xml
+Sitemap: https://zipbeam.in/sitemap.xml

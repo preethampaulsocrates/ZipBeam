@@ -1,18 +1,18 @@
 FROM node:22-alpine
 
 # Create non-root user for security
-RUN addgroup -S swiftdrop && adduser -S swiftdrop -G swiftdrop
+RUN addgroup -S zipbeam && adduser -S zipbeam -G zipbeam
 
 WORKDIR /app
 
 # Copy app files (zero npm dependencies — nothing to install)
-COPY --chown=swiftdrop:swiftdrop . .
+COPY --chown=zipbeam:zipbeam . .
 
-# Create uploads/data directories and hand the whole app dir to swiftdrop,
+# Create uploads/data directories and hand the whole app dir to zipbeam,
 # since server.js creates these at runtime as the non-root user
-RUN mkdir -p uploads data && chown -R swiftdrop:swiftdrop /app
+RUN mkdir -p uploads data && chown -R zipbeam:zipbeam /app
 
-USER swiftdrop
+USER zipbeam
 
 EXPOSE 3000
 

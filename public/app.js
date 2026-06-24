@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════
-   SendThem — Frontend Application
+   ZipBeam — Frontend Application
    Uses: fetch + EventSource (SSE) — no dependencies needed
 ════════════════════════════════════════════════════════ */
 'use strict';
@@ -95,7 +95,7 @@ const Desktop = (() => {
     const wrap = document.getElementById('qr-canvas-wrap');
     if (!wrap) return;
     wrap.innerHTML = '';
-    const url = `${location.origin}/s/${sessionId.replace('SWIFT-','').toLowerCase()}`;
+    const url = `${location.origin}/s/${sessionId.replace('ZIP-','').toLowerCase()}`;
     if (typeof QRCode !== 'undefined') {
       new QRCode(wrap, {
         text: url, width: 200, height: 200,
@@ -332,7 +332,7 @@ const Mobile = (() => {
 
   async function init(sid) {
     const upper = sid.toUpperCase();
-    sessionId = upper.startsWith('SWIFT-') ? upper : 'SWIFT-' + upper;
+    sessionId = upper.startsWith('ZIP-') ? upper : 'ZIP-' + upper;
     showState('mobile-connecting');
     // Retry for up to 20 seconds — gives desktop time to detect reconnect and recreate session
     const deadline = Date.now() + 20000;
