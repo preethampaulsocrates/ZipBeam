@@ -1460,3 +1460,36 @@ body {
     animation: none !important;
   }
 }
+
+/* ─── FAQ Section (SEO content for mobile-to-PC/laptop searches) ──── */
+.faq-section {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 12px 40px 32px;
+}
+.faq-heading {
+  font-family: var(--font-head);
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 16px;
+  text-align: center;
+}
+.faq-item {
+  padding: 16px 0;
+  border-bottom: 1px solid var(--gray-200);
+}
+.faq-item:last-child { border-bottom: none; }
+.faq-item h3 {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--text);
+}
+.faq-item p {
+  font-size: 13.5px;
+  color: var(--gray-500);
+  line-height: 1.6;
+}
+@media (max-width: 640px) {
+  .faq-section { padding: 12px 20px 24px; }
+}
