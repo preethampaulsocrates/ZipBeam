@@ -11,7 +11,13 @@
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/style.css" />
   <style>
-    .legal-wrap { flex: 1; width: 100%; max-width: 760px; margin: 0 auto; padding: 48px 24px 80px; }
+    .legal-wrap { flex: 1; width: 100%; max-width: 760px; margin: 0 auto; padding: 48px 24px 90px; }
+    .footer-fixed {
+      position: fixed; bottom: 0; left: 0; width: 100%;
+      background: rgba(248,250,252,0.9);
+      backdrop-filter: blur(16px) saturate(180%);
+      z-index: 150;
+    }
     .legal-wrap h1 { font-family: var(--font-head); font-size: 32px; font-weight: 800; margin-bottom: 8px; }
     .legal-wrap .updated { color: var(--gray-400); font-size: 13px; margin-bottom: 36px; }
     .legal-wrap h2 { font-family: var(--font-head); font-size: 19px; font-weight: 700; margin: 32px 0 12px; color: var(--gray-700); }
@@ -19,7 +25,7 @@
     .legal-wrap ul { padding-left: 20px; margin-bottom: 14px; }
     .legal-wrap a { color: var(--cyan); text-decoration: none; }
     .legal-wrap a:hover { text-decoration: underline; }
-    .site-nav-links { display: flex; align-items: center; gap: 22px; margin-left: 8px; }
+    .site-nav-links { display: flex; align-items: center; justify-content: center; gap: 22px; flex: 1; }
     .site-nav-links a { color: var(--gray-500); font-size: 14px; font-weight: 500; text-decoration: none; transition: color 0.15s; }
     .site-nav-links a:hover, .site-nav-links a.active { color: var(--cyan); }
   </style>
@@ -35,15 +41,15 @@
       </svg>
       <span class="logo-text">ZipBeam</span>
     </a>
+    <div class="mii-badge" title="Made in India">
+      <span class="mii-flag">🇮🇳</span>
+      <span>Make in India</span>
+    </div>
     <div class="site-nav-links">
       <a href="/">Home</a>
       <a href="/privacy.html" class="active">Privacy Policy</a>
       <a href="/terms.html">Terms &amp; Conditions</a>
       <a href="/contact.html">Contact Us</a>
-    </div>
-    <div class="mii-badge" title="Made in India" style="margin-left:auto">
-      <span class="mii-flag">🇮🇳</span>
-      <span>Make in India</span>
     </div>
   </nav>
 
@@ -96,7 +102,7 @@
   </div>
 
   <!-- FOOTER -->
-  <footer class="footer">
+  <footer class="footer footer-fixed">
     <div class="footer-logo">
       <svg width="20" height="20" viewBox="0 0 34 34" fill="none"><rect width="34" height="34" rx="9" fill="url(#fl-grad)"/><path d="M19 6L10 18h7.5L14 28 27 14h-7.5L19 6z" fill="white"/><defs><linearGradient id="fl-grad" x1="0" y1="0" x2="34" y2="34"><stop stop-color="#22D3EE"/><stop offset="1" stop-color="#A855F7"/></linearGradient></defs></svg>
       <span>ZipBeam</span>
