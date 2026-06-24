@@ -7,30 +7,30 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --indigo: #6366F1;
-  --violet: #A855F7;
-  --cyan: #22D3EE;
+  --indigo: #4F46E5;
+  --violet: #7C3AED;
+  --cyan: #06B6D4;
   --pink: #EC4899;
   --emerald: #10B981;
   --danger: #EF4444;
   --amber: #F59E0B;
-  /* Always-on futuristic dark theme (not tied to OS preference) */
-  --bg: #060818;
-  --text: #EEF2FF;
-  --card: #11142B;
-  --gray-50: #0C0E22;
-  --gray-100: #161A36;
-  --gray-200: #232849;
-  --gray-300: #343B66;
-  --gray-400: #7B85B8;
-  --gray-500: #9CA3D4;
-  --gray-600: #C2C7EC;
-  --gray-700: #DCE0FA;
-  --grad: linear-gradient(135deg, var(--cyan), var(--violet) 55%, var(--pink));
-  --shadow-xs: 0 1px 3px rgba(0,0,0,0.3);
-  --shadow-sm: 0 4px 20px rgba(99,102,241,0.18), 0 2px 8px rgba(0,0,0,0.3);
-  --shadow-md: 0 8px 36px rgba(168,85,247,0.22), 0 4px 14px rgba(0,0,0,0.35);
-  --shadow-lg: 0 24px 70px rgba(34,211,238,0.18), 0 8px 26px rgba(0,0,0,0.4);
+  /* Clean light theme */
+  --bg: #F8FAFC;
+  --text: #0F172A;
+  --card: #FFFFFF;
+  --gray-50: #F8FAFC;
+  --gray-100: #F1F5F9;
+  --gray-200: #E2E8F0;
+  --gray-300: #CBD5E1;
+  --gray-400: #94A3B8;
+  --gray-500: #64748B;
+  --gray-600: #475569;
+  --gray-700: #334155;
+  --grad: linear-gradient(135deg, var(--indigo), var(--violet));
+  --shadow-xs: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-sm: 0 4px 16px rgba(79,70,229,0.08), 0 2px 8px rgba(0,0,0,0.05);
+  --shadow-md: 0 8px 32px rgba(79,70,229,0.12), 0 4px 12px rgba(0,0,0,0.06);
+  --shadow-lg: 0 20px 60px rgba(79,70,229,0.15), 0 8px 24px rgba(0,0,0,0.08);
   --radius-sm: 10px;
   --radius: 16px;
   --radius-lg: 22px;
@@ -68,9 +68,9 @@ body {
   gap: 16px;
   padding: 0 40px;
   height: 56px;
-  background: rgba(6,8,24,0.75);
+  background: rgba(248,250,252,0.85);
   backdrop-filter: blur(24px) saturate(180%);
-  border-bottom: 1px solid rgba(168,85,247,0.18);
+  border-bottom: 1px solid rgba(79,70,229,0.07);
 }
 
 .mii-badge {
@@ -201,12 +201,11 @@ body {
 
 /* ─── Cards ───────────────────────────────────────────── */
 .card {
-  background: linear-gradient(160deg, rgba(22,26,54,0.9), rgba(13,15,38,0.85));
-  backdrop-filter: blur(20px);
+  background: var(--card);
   border-radius: var(--radius-lg);
   padding: 20px;
   box-shadow: var(--shadow-md);
-  border: 1px solid rgba(168,85,247,0.18);
+  border: 1px solid rgba(79,70,229,0.07);
   position: relative;
   overflow: hidden;
 }
@@ -215,7 +214,7 @@ body {
   position: absolute;
   top: 0; left: 0; right: 0;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(34,211,238,0.5), rgba(168,85,247,0.5), transparent);
+  background: linear-gradient(90deg, transparent, rgba(79,70,229,0.2), transparent);
 }
 
 .card-header {
@@ -1293,22 +1292,22 @@ body { top: 0 !important; }
    FUTURISTIC THEME — animated background, glow, tilt
 ════════════════════════════════════════════════════════ */
 
-/* Base canvas — deep space gradient behind everything */
+/* Base canvas — soft light gradient behind everything */
 body {
-  background: radial-gradient(ellipse 120% 80% at 50% -10%, #1a1545 0%, #060818 55%),
-              #060818;
+  background: radial-gradient(ellipse 120% 80% at 50% -10%, #EEF2FF 0%, #F8FAFC 55%),
+              #F8FAFC;
   background-attachment: fixed;
 }
 
-/* Animated neon grid background behind the whole app */
+/* Animated grid background behind the whole app — subtle on light bg */
 .app-shell::before {
   content: '';
   position: fixed;
   inset: 0;
   z-index: -1;
   background-image:
-    linear-gradient(to right, rgba(34,211,238,0.14) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(168,85,247,0.14) 1px, transparent 1px);
+    linear-gradient(to right, rgba(79,70,229,0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(124,58,237,0.05) 1px, transparent 1px);
   background-size: 40px 40px;
   mask-image: radial-gradient(ellipse 80% 65% at 50% 0%, #000 55%, transparent 100%);
   -webkit-mask-image: radial-gradient(ellipse 80% 65% at 50% 0%, #000 55%, transparent 100%);
@@ -1319,7 +1318,7 @@ body {
   to   { background-position: 80px 80px; }
 }
 
-/* Floating neon glow orbs — three, different colors, drifting at different speeds */
+/* Floating glow orbs — soft pastel, subtle on light background */
 .app-shell::after {
   content: '';
   position: fixed;
@@ -1327,7 +1326,7 @@ body {
   right: -10%;
   width: 560px;
   height: 560px;
-  background: radial-gradient(circle, rgba(168,85,247,0.28), transparent 70%);
+  background: radial-gradient(circle, rgba(124,58,237,0.08), transparent 70%);
   border-radius: 50%;
   z-index: -1;
   animation: orbFloat 14s ease-in-out infinite;
@@ -1341,7 +1340,7 @@ body {
   left: -10%;
   width: 420px;
   height: 420px;
-  background: radial-gradient(circle, rgba(34,211,238,0.22), transparent 70%);
+  background: radial-gradient(circle, rgba(6,182,212,0.07), transparent 70%);
   border-radius: 50%;
   z-index: -1;
   animation: orbFloat2 18s ease-in-out infinite;
@@ -1355,7 +1354,7 @@ body {
   right: 20%;
   width: 380px;
   height: 380px;
-  background: radial-gradient(circle, rgba(236,72,153,0.16), transparent 70%);
+  background: radial-gradient(circle, rgba(236,72,153,0.05), transparent 70%);
   border-radius: 50%;
   z-index: -1;
   animation: orbFloat 16s ease-in-out infinite reverse;
@@ -1395,8 +1394,8 @@ body {
   animation: qrGlow 3s ease-in-out infinite;
 }
 @keyframes qrGlow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(34,211,238,0.25), 0 0 0 0 rgba(168,85,247,0.2); }
-  50%      { box-shadow: 0 0 30px 6px rgba(34,211,238,0.35), 0 0 50px 14px rgba(168,85,247,0.22); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(6,182,212,0.15), 0 0 0 0 rgba(124,58,237,0.12); }
+  50%      { box-shadow: 0 0 20px 4px rgba(6,182,212,0.2), 0 0 30px 8px rgba(124,58,237,0.12); }
 }
 .qr-corners span {
   border-color: var(--cyan);
@@ -1413,9 +1412,9 @@ body {
   transition: transform 0.25s cubic-bezier(0.16,1,0.3,1), box-shadow 0.25s, border-color 0.25s, background 0.25s;
 }
 .file-item:hover {
-  transform: translateY(-4px) scale(1.015);
-  box-shadow: 0 10px 30px rgba(168,85,247,0.25), 0 0 0 1px rgba(34,211,238,0.2);
-  border-color: rgba(168,85,247,0.45);
+  transform: translateY(-3px) scale(1.01);
+  box-shadow: 0 8px 24px rgba(79,70,229,0.15);
+  border-color: rgba(124,58,237,0.3);
 }
 
 /* Logo pulse */
