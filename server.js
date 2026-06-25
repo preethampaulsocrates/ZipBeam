@@ -524,7 +524,10 @@ const server = http.createServer(async (req, res) => {
   // ── Static files ──
   if (method === 'GET') {
     const safePath = pathname.replace(/\.\./g, '').replace(/\/+/g, '/');
-    const filePath = safePath === '/' ? path.join(PUBLIC_DIR, 'index.html') : path.join(PUBLIC_DIR, safePath);
+    let filePath = safePath === '/' ? path.join(PUBLIC_DIR, 'index.html') : path.join(PUBLIC_DIR, safePath);
+    if (filePath.startsWith(PUBLIC_DIR) && fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
+      filePath = path.join(filePath, 'index.html');
+    }
     if (filePath.startsWith(PUBLIC_DIR) && fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
       return serveStatic(res, filePath);
     }
