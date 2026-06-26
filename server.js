@@ -7,10 +7,28 @@
 'use strict';
 
 const http   = require('http');
+const https  = require('https');
 const fs     = require('fs');
 const path   = require('path');
 const crypto = require('crypto');
 const { EventEmitter } = require('events');
+
+// Verifies a Google Identity Services ID token via Google's tokeninfo endpoint (no SDK needed)
+function verifyGoogleIdToken(idToken) {
+  return new Promise((resolve, reject) => {
+    https.get(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`, (r) => {
+      let data = '';
+      r.on('data', c => data += c);
+      r.on('end', () => {
+        try {
+          const payload = JSON.parse(data);
+          if (r.statusCode !== 200 || !payload.sub) return reject(new Error('Invalid Google token'));
+          resolve(payload);
+        } catch { reject(new Error('Invalid Google token response')); }
+      });
+    }).on('error', reject);
+  });
+}
 
 const PORT        = process.env.PORT || 3000;
 const UPLOAD_DIR  = path.join(__dirname, 'uploads');
@@ -23,11 +41,13 @@ if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 if (!fs.existsSync(DATA_DIR))   fs.mkdirSync(DATA_DIR,   { recursive: true });
 
 // ─── In-memory stores ─────────────────────────────────────────────────────────
-const sessions   = new Map(); // sessionId → { id, expiresAt, files:[] }
+const sessions   = new Map(); // sessionId → { id, expiresAt, files:[], kind?, toUserId?, fromUserId? }
 const fileStore  = new Map(); // fileId    → { id, sessionId, name, size, mime, diskPath, uploadedAt }
 const sseClients = new Map(); // sessionId → Set of res objects (desktop listeners)
-const users      = new Map(); // userId    → { id, name, email, passwordHash, salt, role, credits, createdAt }
+const sseUserClients = new Map(); // userId → Set of res objects (logged-in inbox listeners)
+const users      = new Map(); // userId    → { id, name, email, passwordHash, salt, role, credits, createdAt, googleId?, recentContacts:[] }
 const authTokens = new Map(); // token     → { userId, expiresAt }
+const DELIVERY_TTL = 24 * 60 * 60 * 1000; // 24h — direct user-to-user / shop QR deliveries
 
 // ─── User / Auth persistence ──────────────────────────────────────────────────
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
@@ -91,6 +111,12 @@ function getAuthUser(req) {
 function safeUser(u) {
   return { id: u.id, name: u.name, email: u.email, role: u.role, credits: u.credits, createdAt: u.createdAt };
 }
+function addRecentContact(user, contactId, contactName) {
+  if (!Array.isArray(user.recentContacts)) user.recentContacts = [];
+  user.recentContacts = user.recentContacts.filter(c => c.id !== contactId);
+  user.recentContacts.unshift({ id: contactId, name: contactName, lastSentAt: Date.now() });
+  user.recentContacts = user.recentContacts.slice(0, 10);
+}
 function authCookie(token) {
   return `st=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(AUTH_TTL / 1000)}`;
 }
@@ -151,9 +177,9 @@ setInterval(() => {
 }, 5 * 60 * 1000);
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-function genSessionId() {
+function genSessionId(prefix = 'ZIP-') {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let id = 'ZIP-';
+  let id = prefix;
   for (let i = 0; i < 6; i++) id += chars[crypto.randomInt(chars.length)];
   return id;
 }
@@ -170,6 +196,14 @@ function deleteFile(fileId) {
 
 function sseEmit(sessionId, event, data) {
   const clients = sseClients.get(sessionId);
+  if (!clients || clients.size === 0) return;
+  const msg = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  for (const res of clients) {
+    try { res.write(msg); } catch {}
+  }
+}
+function sseEmitUser(userId, event, data) {
+  const clients = sseUserClients.get(userId);
   if (!clients || clients.size === 0) return;
   const msg = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
   for (const res of clients) {
@@ -345,6 +379,40 @@ const server = http.createServer(async (req, res) => {
     return res.end(JSON.stringify({ user: safeUser(found) }));
   }
 
+  // ── API: Auth — Google Sign-In ──
+  if (method === 'POST' && pathname === '/api/auth/google') {
+    if (!checkRateLimit(ip, 10, 60000)) return json(res, 429, { error: 'Too many requests' });
+    if (!process.env.GOOGLE_CLIENT_ID) return json(res, 501, { error: 'Google Sign-In is not configured yet' });
+    let body; try { body = JSON.parse((await readBody(req)).toString()); } catch { return json(res, 400, { error: 'Invalid JSON' }); }
+    const { credential } = body;
+    if (!credential) return json(res, 400, { error: 'Missing Google credential' });
+    let payload;
+    try { payload = await verifyGoogleIdToken(credential); } catch { return json(res, 401, { error: 'Invalid Google token' }); }
+    if (payload.aud !== process.env.GOOGLE_CLIENT_ID) return json(res, 401, { error: 'Token audience mismatch' });
+
+    let user = null;
+    for (const u of users.values()) if (u.googleId === payload.sub || u.email === (payload.email || '').toLowerCase()) { user = u; break; }
+    if (!user) {
+      user = {
+        id: crypto.randomBytes(8).toString('hex'),
+        name: payload.name || payload.email.split('@')[0],
+        email: (payload.email || '').toLowerCase(),
+        passwordHash: null, salt: null,
+        googleId: payload.sub,
+        role: 'user', credits: 200, createdAt: Date.now(), recentContacts: [],
+      };
+      users.set(user.id, user);
+    } else if (!user.googleId) {
+      user.googleId = payload.sub;
+    }
+    saveUsers();
+    const token = crypto.randomBytes(32).toString('hex');
+    authTokens.set(token, { userId: user.id, expiresAt: Date.now() + AUTH_TTL });
+    saveAuthTokens();
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Set-Cookie': authCookie(token), 'Access-Control-Allow-Origin': '*' });
+    return res.end(JSON.stringify({ user: safeUser(user) }));
+  }
+
   // ── API: Auth — logout ──
   if (method === 'POST' && pathname === '/api/auth/logout') {
     const token = parseCookies(req).st;
@@ -364,12 +432,109 @@ const server = http.createServer(async (req, res) => {
   if (method === 'GET' && pathname === '/api/admin/users') {
     const user = getAuthUser(req);
     if (!user || user.role !== 'admin') return json(res, 403, { error: 'Admin only' });
-    return json(res, 200, { users: [...users.values()].map(safeUser) });
+    const totalDeliveries = [...sessions.values()].filter(s => s.kind === 'delivery').length;
+    return json(res, 200, { users: [...users.values()].map(safeUser), totalDeliveries });
   }
 
   // ── Admin page ──
   if (method === 'GET' && pathname === '/admin') {
     return serveStatic(res, path.join(PUBLIC_DIR, 'admin.html'));
+  }
+
+  // ── API: Look up a user by their ZipBeam ID (for "send to UID" + shop QR landing) ──
+  const lookupMatch = pathname.match(/^\/api\/users\/lookup\/([a-f0-9]+)$/i);
+  if (method === 'GET' && lookupMatch) {
+    const target = users.get(lookupMatch[1]);
+    if (!target) return json(res, 404, { error: 'No ZipBeam user with that ID' });
+    return json(res, 200, { id: target.id, name: target.name });
+  }
+
+  // ── API: Create a direct delivery to another user's ZipBeam ID ──
+  if (method === 'POST' && pathname === '/api/deliveries') {
+    if (!checkRateLimit(ip, 30, 60000)) return json(res, 429, { error: 'Too many requests' });
+    let body; try { body = JSON.parse((await readBody(req)).toString()); } catch { return json(res, 400, { error: 'Invalid JSON' }); }
+    const toUserId = (body.toUserId || '').trim();
+    const toUser = users.get(toUserId);
+    if (!toUser) return json(res, 404, { error: 'No ZipBeam user with that ID' });
+
+    const fromUser = getAuthUser(req);
+    const deliveryId = genSessionId('DLV-');
+    const expiresAt = Date.now() + DELIVERY_TTL;
+    sessions.set(deliveryId, {
+      id: deliveryId, expiresAt, files: [],
+      kind: 'delivery', toUserId: toUser.id,
+      fromUserId: fromUser ? fromUser.id : null,
+      fromName: fromUser ? fromUser.name : null,
+    });
+    saveSessions();
+
+    if (fromUser) {
+      addRecentContact(fromUser, toUser.id, toUser.name);
+      saveUsers();
+    }
+    return json(res, 200, { deliveryId, toUser: { id: toUser.id, name: toUser.name } });
+  }
+
+  // ── API: Recent contacts for the logged-in user ──
+  if (method === 'GET' && pathname === '/api/contacts/recent') {
+    const user = getAuthUser(req);
+    if (!user) return json(res, 401, { error: 'Not authenticated' });
+    const contacts = (user.recentContacts || []).map(c => ({ ...c, name: users.get(c.id)?.name || c.name }));
+    return json(res, 200, { contacts });
+  }
+
+  // ── API: Pending inbox files for the logged-in user (delivery sessions addressed to them) ──
+  if (method === 'GET' && pathname === '/api/inbox') {
+    const user = getAuthUser(req);
+    if (!user) return json(res, 401, { error: 'Not authenticated' });
+    const files = [];
+    for (const sess of sessions.values()) {
+      if (sess.kind !== 'delivery' || sess.toUserId !== user.id) continue;
+      for (const fid of sess.files) {
+        const info = fileStore.get(fid);
+        if (info) files.push({ id: info.id, name: info.originalName, size: info.size, mimetype: info.mimetype, uploadedAt: info.uploadedAt, purpose: info.purpose, fromName: sess.fromName || null });
+      }
+    }
+    return json(res, 200, { files });
+  }
+
+  // ── API: SSE — per-user inbox stream (logged-in desktop listens here too) ──
+  if (method === 'GET' && pathname === '/api/users/me/events') {
+    const user = getAuthUser(req);
+    if (!user) return json(res, 401, { error: 'Not authenticated' });
+    res.writeHead(200, {
+      'Content-Type':                'text/event-stream',
+      'Cache-Control':               'no-cache',
+      'Connection':                  'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+    });
+    res.write(':ok\n\n');
+    if (!sseUserClients.has(user.id)) sseUserClients.set(user.id, new Set());
+    sseUserClients.get(user.id).add(res);
+    const keepalive = setInterval(() => {
+      try { res.write(':ping\n\n'); } catch { clearInterval(keepalive); }
+    }, 25000);
+    req.on('close', () => {
+      clearInterval(keepalive);
+      const clients = sseUserClients.get(user.id);
+      if (clients) { clients.delete(res); if (clients.size === 0) sseUserClients.delete(user.id); }
+    });
+    return;
+  }
+
+  // ── Static shop QR landing — scanning always sends to this user's permanent ID ──
+  const shopMatch = pathname.match(/^\/u\/([a-f0-9]+)$/i);
+  if (method === 'GET' && shopMatch) {
+    const toUser = users.get(shopMatch[1]);
+    if (!toUser) return serveStatic(res, path.join(PUBLIC_DIR, 'index.html'));
+    const deliveryId = genSessionId('DLV-');
+    sessions.set(deliveryId, {
+      id: deliveryId, expiresAt: Date.now() + DELIVERY_TTL, files: [],
+      kind: 'delivery', toUserId: toUser.id, fromUserId: null, fromName: null,
+    });
+    saveSessions();
+    res.writeHead(302, { Location: `/s/${deliveryId.replace('DLV-', '').toLowerCase()}` });
+    return res.end();
   }
 
   // ── API: Create session (open — no login required) ──
@@ -454,6 +619,9 @@ const server = http.createServer(async (req, res) => {
     saveSessions();
     // Notify desktop via SSE
     sseEmit(sid, 'files:received', { files: uploadedFiles });
+    if (sess.kind === 'delivery' && sess.toUserId) {
+      sseEmitUser(sess.toUserId, 'files:received', { files: uploadedFiles, fromName: sess.fromName || null });
+    }
     return json(res, 200, { success: true, files: uploadedFiles });
   }
 

@@ -1493,3 +1493,116 @@ body {
 @media (max-width: 640px) {
   .faq-section { padding: 12px 20px 24px; }
 }
+
+/* ─── Google Sign-In button ──────────────────────────── */
+.auth-google-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  background: #fff;
+  color: #0F172A;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  margin-bottom: 12px;
+}
+.auth-google-btn:hover { background: #F8FAFC; border-color: #CBD5E1; }
+.auth-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  color: #94A3B8;
+  font-size: 12px;
+  margin: 10px 0 16px;
+}
+.auth-divider::before, .auth-divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid #E2E8F0;
+}
+.auth-divider span { padding: 0 10px; }
+
+/* ─── Account panel — direct user-to-user transfers ──── */
+.account-panel {
+  max-width: 1100px;
+  margin: 0 auto 20px;
+  padding: 20px 40px;
+}
+@media (max-width: 900px) {
+  .account-panel { padding: 16px 20px; }
+}
+.my-uid-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.my-uid {
+  background: var(--gray-50);
+  border: 1px solid rgba(79,70,229,0.15);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: var(--indigo);
+}
+.my-uid-hint {
+  font-size: 12.5px;
+  color: var(--gray-400);
+  line-height: 1.6;
+  margin-bottom: 16px;
+}
+.my-uid-hint code {
+  background: var(--gray-50);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.send-to-uid-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.recent-contacts-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gray-400);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin: 14px 0 8px;
+}
+.recent-contacts-list {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.recent-contact-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--gray-50);
+  border: 1px solid rgba(79,70,229,0.1);
+  border-radius: 999px;
+  padding: 6px 6px 6px 12px;
+  font-size: 13px;
+  color: var(--text);
+}
+.recent-contact-chip button {
+  background: var(--grad);
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}

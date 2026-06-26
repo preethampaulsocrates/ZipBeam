@@ -321,7 +321,7 @@ const Desktop = (() => {
     }
   }
 
-  return { init, newSession, copyCode, downloadFile, printFile, triggerFramePrint, closePrintModal };
+  return { init, newSession, copyCode, downloadFile, printFile, triggerFramePrint, closePrintModal, addExternalFile: addFile };
 })();
 
 // ─── Mobile Module ────────────────────────────────────────────────────────────
@@ -332,21 +332,28 @@ const Mobile = (() => {
 
   async function init(sid) {
     const upper = sid.toUpperCase();
-    sessionId = upper.startsWith('ZIP-') ? upper : 'ZIP-' + upper;
+    // Session IDs always carry a prefix (ZIP- for QR sessions, DLV- for direct/shop deliveries)
+    // that's stripped from the URL, so try each candidate until one resolves.
+    const candidates = upper.startsWith('ZIP-') || upper.startsWith('DLV-')
+      ? [upper]
+      : ['ZIP-' + upper, 'DLV-' + upper];
     showState('mobile-connecting');
     // Retry for up to 20 seconds — gives desktop time to detect reconnect and recreate session
     const deadline = Date.now() + 20000;
     while (Date.now() < deadline) {
-      try {
-        const r = await fetch(`/api/sessions/${sessionId}`);
-        const data = await r.json();
-        if (r.ok && data.valid) {
-          document.getElementById('mobile-session-code').textContent = sessionId;
-          document.getElementById('mobile-session-code-choice').textContent = sessionId;
-          showState('mobile-choice');
-          return;
-        }
-      } catch {}
+      for (const candidate of candidates) {
+        try {
+          const r = await fetch(`/api/sessions/${candidate}`);
+          const data = await r.json();
+          if (r.ok && data.valid) {
+            sessionId = candidate;
+            document.getElementById('mobile-session-code').textContent = sessionId;
+            document.getElementById('mobile-session-code-choice').textContent = sessionId;
+            showState('mobile-choice');
+            return;
+          }
+        } catch {}
+      }
       await new Promise(r => setTimeout(r, 3000));
     }
     showState('mobile-invalid');
@@ -539,6 +546,7 @@ const Auth = (() => {
       updateNavbar();
       document.getElementById('app-desktop').style.display = 'flex';
       Desktop.init();
+      Account.init(currentUser);
     } catch { errEl.textContent = 'Network error — please try again'; }
   }
 
@@ -559,6 +567,7 @@ const Auth = (() => {
       updateNavbar();
       document.getElementById('app-desktop').style.display = 'flex';
       Desktop.init();
+      Account.init(currentUser);
     } catch { errEl.textContent = 'Network error — please try again'; }
   }
 
@@ -567,7 +576,123 @@ const Auth = (() => {
     window.location.reload();
   }
 
-  return { check, showTab, showOverlay, hideOverlay, login, signup, logout };
+  function initGoogleButton() {
+    const clientId = document.querySelector('meta[name="google-client-id"]')?.content;
+    if (!clientId || clientId === 'REPLACE_WITH_YOUR_GOOGLE_CLIENT_ID') return; // not configured yet
+    const btn = document.getElementById('google-signin-btn');
+    const divider = document.getElementById('google-signin-divider');
+    if (btn) btn.style.display = 'flex';
+    if (divider) divider.style.display = 'flex';
+    const tryInit = () => {
+      if (typeof google === 'undefined' || !google.accounts) { setTimeout(tryInit, 300); return; }
+      google.accounts.id.initialize({ client_id: clientId, callback: handleGoogleCredential });
+    };
+    tryInit();
+  }
+
+  async function handleGoogleCredential(resp) {
+    try {
+      const r = await fetch('/api/auth/google', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ credential: resp.credential }) });
+      const d = await r.json();
+      if (!r.ok) { Toast.error(d.error || 'Google sign-in failed'); return; }
+      currentUser = d.user;
+      hideOverlay();
+      updateNavbar();
+      document.getElementById('app-desktop').style.display = 'flex';
+      Desktop.init();
+      Account.init(currentUser);
+    } catch { Toast.error('Network error — please try again'); }
+  }
+
+  function googleSignIn() {
+    if (typeof google === 'undefined' || !google.accounts) { Toast.error('Google Sign-In is still loading — try again in a moment'); return; }
+    google.accounts.id.prompt();
+  }
+
+  return { check, showTab, showOverlay, hideOverlay, login, signup, logout, initGoogleButton, googleSignIn };
+})();
+
+// ─── Account Module — direct user-to-user transfers by ZipBeam ID ─────────────
+const Account = (() => {
+  let user = null;
+  let userEventSource = null;
+
+  function init(u) {
+    user = u;
+    const panel = document.getElementById('account-panel');
+    if (!panel) return;
+    panel.style.display = 'block';
+    document.getElementById('my-uid').textContent = user.id;
+    const waLink = document.getElementById('my-uid-whatsapp');
+    if (waLink) {
+      const text = encodeURIComponent(`Send me files on ZipBeam — open this link and scan or upload directly: ${location.origin}/u/${user.id}\n\nOr enter my ZipBeam ID on zipbeam.in: ${user.id}`);
+      waLink.href = `https://wa.me/?text=${text}`;
+    }
+    loadRecentContacts();
+    hydrateInbox();
+    connectUserSSE();
+  }
+
+  function copyMyUid() {
+    if (!user) return;
+    navigator.clipboard?.writeText(user.id).then(() => Toast.success('ZipBeam ID copied!')).catch(() => Toast.show('ID: ' + user.id));
+  }
+
+  async function loadRecentContacts() {
+    try {
+      const r = await fetch('/api/contacts/recent');
+      if (!r.ok) return;
+      const { contacts } = await r.json();
+      const wrap = document.getElementById('recent-contacts-wrap');
+      const list = document.getElementById('recent-contacts-list');
+      if (!wrap || !list) return;
+      if (!contacts.length) { wrap.style.display = 'none'; return; }
+      wrap.style.display = 'block';
+      list.innerHTML = contacts.map(c => `
+        <div class="recent-contact-chip">
+          <span>${escHtml(c.name)}</span>
+          <button onclick="Account.sendToUid('${c.id}')">Send again</button>
+        </div>
+      `).join('');
+    } catch {}
+  }
+
+  async function sendToUid(presetUid) {
+    const input = document.getElementById('send-to-uid-input');
+    const errEl = document.getElementById('send-to-uid-error');
+    const toUserId = (presetUid || input?.value || '').trim();
+    if (errEl) errEl.textContent = '';
+    if (!toUserId) { if (errEl) errEl.textContent = 'Enter a ZipBeam ID first'; return; }
+    try {
+      const r = await fetch('/api/deliveries', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ toUserId }) });
+      const d = await r.json();
+      if (!r.ok) { if (errEl) errEl.textContent = d.error || 'Could not find that ZipBeam ID'; return; }
+      window.location.href = `/s/${d.deliveryId.replace('DLV-', '').toLowerCase()}`;
+    } catch { if (errEl) errEl.textContent = 'Network error — please try again'; }
+  }
+
+  async function hydrateInbox() {
+    try {
+      const r = await fetch('/api/inbox');
+      if (!r.ok) return;
+      const { files } = await r.json();
+      files.forEach(f => Desktop.addExternalFile(f));
+    } catch {}
+  }
+
+  function connectUserSSE() {
+    if (userEventSource) userEventSource.close();
+    userEventSource = new EventSource('/api/users/me/events');
+    userEventSource.addEventListener('files:received', (e) => {
+      const { files: newFiles, fromName } = JSON.parse(e.data);
+      newFiles.forEach(f => Desktop.addExternalFile({ ...f, isNew: true }));
+      const who = fromName ? ` from ${fromName}` : '';
+      Toast.success(`${newFiles.length} file${newFiles.length > 1 ? 's' : ''} received${who}!`);
+      loadRecentContacts();
+    });
+  }
+
+  return { init, copyMyUid, sendToUid };
 })();
 
 // ─── Router (runs last, after modules defined) ────────────────────────────────
@@ -592,10 +717,12 @@ const Auth = (() => {
           `<button class="btn-ghost" style="font-size:13px" onclick="Auth.logout()">Sign Out</button>`;
         el.style.display = 'flex';
       }
+      if (u.user) Account.init(u.user);
     } else if (el) {
       el.innerHTML = `<button class="btn-ghost" style="font-size:13px" onclick="Auth.showOverlay('login')">Sign In</button>`;
       el.style.display = 'flex';
     }
+    Auth.initGoogleButton();
     document.getElementById('app-desktop').style.display = 'flex';
     Desktop.init();
   }

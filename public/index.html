@@ -122,11 +122,14 @@
   }
   </script>
 
+  <!-- Replace with your real Google Cloud OAuth Client ID to enable "Continue with Google" -->
+  <meta name="google-client-id" content="REPLACE_WITH_YOUR_GOOGLE_CLIENT_ID" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap" rel="stylesheet" />
   <script src="/qrcode.min.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <link rel="stylesheet" href="/style.css" />
   <script>
     function googleTranslateElementInit() {
@@ -191,6 +194,13 @@
       <button id="tab-login"  class="auth-tab active" onclick="Auth.showTab('login')">Log In</button>
       <button id="tab-signup" class="auth-tab"         onclick="Auth.showTab('signup')">Sign Up</button>
     </div>
+
+    <!-- Google Sign-In (hidden automatically until a real Client ID is configured) -->
+    <button id="google-signin-btn" class="auth-google-btn" style="display:none" onclick="Auth.googleSignIn()">
+      <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.9c1.7-1.57 2.7-3.88 2.7-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.26c-.8.55-1.84.86-3.06.86-2.36 0-4.36-1.6-5.08-3.75H.9v2.33A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.92 10.67A5.4 5.4 0 0 1 3.64 9c0-.58.1-1.15.28-1.67V5h-3v2.33A9 9 0 0 0 0 9c0 1.45.35 2.83.9 4.04l3.02-2.37z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58A9 9 0 0 0 9 0 9 9 0 0 0 .9 5l3.02 2.33C4.64 5.18 6.64 3.58 9 3.58z"/></svg>
+      Continue with Google
+    </button>
+    <div id="google-signin-divider" class="auth-divider" style="display:none"><span>or</span></div>
 
     <!-- Login form -->
     <div id="auth-login">
@@ -265,6 +275,33 @@
   <section class="hero">
     <h1 class="hero-title">Send files from <span class="gradient-text">phone to your PC or laptop</span></h1>
     <p style="font-size:13px;color:var(--gray-500);margin-top:6px">No app, no cable, no signup — just scan and send.</p>
+  </section>
+
+  <!-- ACCOUNT PANEL — direct user-to-user transfers (only visible when logged in) -->
+  <section id="account-panel" class="card account-panel" style="display:none">
+    <div class="card-header">
+      <h2>Your ZipBeam ID</h2>
+      <p>Share it so anyone can send files straight to you</p>
+    </div>
+    <div class="my-uid-row">
+      <code id="my-uid" class="my-uid"></code>
+      <button class="copy-btn" onclick="Account.copyMyUid()" title="Copy ID">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+      </button>
+      <a id="my-uid-whatsapp" class="btn-ghost" style="font-size:13px" target="_blank" rel="noopener">📤 Share via WhatsApp</a>
+    </div>
+    <p class="my-uid-hint">Tip: a print shop can put a fixed QR code of <code>zipbeam.in/u/&lt;their ID&gt;</code> at their counter — every customer who scans it can send files straight to them, no re-printing needed.</p>
+
+    <div class="send-to-uid-row">
+      <input id="send-to-uid-input" class="auth-input" placeholder="Enter a ZipBeam ID to send files" style="flex:1" />
+      <button class="btn-ghost" onclick="Account.sendToUid()">Send Files</button>
+    </div>
+    <p id="send-to-uid-error" class="auth-error"></p>
+
+    <div id="recent-contacts-wrap" style="display:none">
+      <p class="recent-contacts-label">Recent</p>
+      <div id="recent-contacts-list" class="recent-contacts-list"></div>
+    </div>
   </section>
 
   <!-- MAIN GRID -->

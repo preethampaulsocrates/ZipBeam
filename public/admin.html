@@ -76,6 +76,10 @@
         <div class="stat-value" id="stat-today">—</div>
         <div class="stat-label">Joined Today</div>
       </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-deliveries">—</div>
+        <div class="stat-label">Direct/Shop Deliveries</div>
+      </div>
     </div>
 
     <p class="section-title">All Users</p>
@@ -117,7 +121,7 @@
     document.getElementById('subtitle').textContent = `Signed in as ${user.name} (${user.email})`;
 
     const usersRes = await fetch('/api/admin/users');
-    const { users } = await usersRes.json();
+    const { users, totalDeliveries } = await usersRes.json();
 
     const today = new Date().toDateString();
     const todayCount = users.filter(u => new Date(u.createdAt).toDateString() === today).length;
@@ -126,6 +130,7 @@
     document.getElementById('stat-total').textContent  = users.length;
     document.getElementById('stat-admins').textContent = adminCount;
     document.getElementById('stat-today').textContent  = todayCount;
+    document.getElementById('stat-deliveries').textContent = totalDeliveries ?? 0;
 
     const tbody = document.getElementById('user-table-body');
     if (users.length === 0) {
