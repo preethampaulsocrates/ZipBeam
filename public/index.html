@@ -288,8 +288,12 @@
       <button class="copy-btn" onclick="Account.copyMyUid()" title="Copy ID">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
       </button>
+      <button class="copy-btn" onclick="Account.downloadMyQr()" title="Download QR code">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      </button>
       <a id="my-uid-whatsapp" class="btn-ghost" style="font-size:13px" target="_blank" rel="noopener">📤 Share via WhatsApp</a>
     </div>
+    <div id="my-uid-qr-offscreen" style="position:absolute;left:-9999px;top:-9999px"></div>
     <p class="my-uid-hint">Tip: a print shop can put a fixed QR code of <code>zipbeam.in/u/&lt;their ID&gt;</code> at their counter — every customer who scans it can send files straight to them, no re-printing needed.</p>
 
     <div class="send-to-uid-row">

@@ -638,6 +638,33 @@ const Account = (() => {
     navigator.clipboard?.writeText(user.id).then(() => Toast.success('ZipBeam ID copied!')).catch(() => Toast.show('ID: ' + user.id));
   }
 
+  function downloadMyQr() {
+    if (!user) return;
+    const wrap = document.getElementById('my-uid-qr-offscreen');
+    if (!wrap || typeof QRCode === 'undefined') { Toast.error('QR generator not available'); return; }
+    wrap.innerHTML = '';
+    const url = `${location.origin}/u/${user.id}`;
+    new QRCode(wrap, {
+      text: url, width: 600, height: 600,
+      colorDark: '#0F172A', colorLight: '#FFFFFF',
+      correctLevel: QRCode.CorrectLevel.H
+    });
+    // QRCode.js renders async into a canvas (or an img as fallback) — give it a tick
+    setTimeout(() => {
+      const canvas = wrap.querySelector('canvas');
+      const img = wrap.querySelector('img');
+      const dataUrl = canvas ? canvas.toDataURL('image/png') : (img ? img.src : null);
+      if (!dataUrl) { Toast.error('Could not generate QR code'); return; }
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = `zipbeam-qr-${user.id}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      Toast.success('QR code downloaded — print it and display it anywhere');
+    }, 150);
+  }
+
   async function loadRecentContacts() {
     try {
       const r = await fetch('/api/contacts/recent');
@@ -692,7 +719,7 @@ const Account = (() => {
     });
   }
 
-  return { init, copyMyUid, sendToUid };
+  return { init, copyMyUid, downloadMyQr, sendToUid };
 })();
 
 // ─── Router (runs last, after modules defined) ────────────────────────────────
