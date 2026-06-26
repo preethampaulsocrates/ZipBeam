@@ -198,7 +198,7 @@ const Desktop = (() => {
     badge.className = fileArr.length > 0 ? 'badge has-files' : 'badge';
 
     if (fileArr.length === 0) {
-      empty.style.display = 'flex'; list.style.display = 'none'; return;
+      empty.style.display = 'flex'; list.style.display = 'none'; list.innerHTML = ''; return;
     }
     empty.style.display = 'none'; list.style.display = 'flex';
 
@@ -306,6 +306,7 @@ const Desktop = (() => {
     clearInterval(timerInterval);
     if (eventSource) { eventSource.close(); eventSource = null; }
     files = {};
+    renderFiles();
     setStatus('waiting');
     await createSession();
     connectSSE();
