@@ -144,7 +144,17 @@
   <script src="https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit" async></script>
 </head>
 <body>
-<div id="google-translate-el" style="display:none"></div>
+
+<!-- LANGUAGE PANEL — slides in from the left -->
+<div id="lang-panel-overlay" class="lang-panel-overlay" style="display:none" onclick="if(event.target===this)LangPanel.close()">
+  <div class="lang-panel">
+    <div class="lang-panel-header">
+      <span>🌐 Select Language</span>
+      <button class="lang-panel-close" onclick="LangPanel.close()" title="Close">✕</button>
+    </div>
+    <div id="google-translate-el"></div>
+  </div>
+</div>
 
 <!-- ═══════════════════════════════════════════════════
      AUTH OVERLAY
@@ -255,7 +265,7 @@
         <span id="status-label">Waiting for device…</span>
       </div>
     </div>
-    <button class="btn-ghost lang-btn" onclick="document.getElementById('google-translate-el').style.display='block';this.style.display='none'" title="Translate">
+    <button class="btn-ghost lang-btn" onclick="LangPanel.open()" title="Translate">
       🌐 Language
     </button>
     <div id="nav-user" class="nav-user" style="display:none"></div>
@@ -471,7 +481,7 @@
       <svg width="28" height="28" viewBox="0 0 34 34" fill="none"><rect width="34" height="34" rx="9" fill="url(#ml-grad)"/><path d="M19 6L10 18h7.5L14 28 27 14h-7.5L19 6z" fill="white"/><defs><linearGradient id="ml-grad" x1="0" y1="0" x2="34" y2="34"><stop stop-color="#22D3EE"/><stop offset="1" stop-color="#A855F7"/></linearGradient></defs></svg>
       <span class="logo-text">ZipBeam</span>
     </div>
-    <button class="btn-ghost lang-btn" onclick="document.getElementById('google-translate-el').style.display='block';this.style.display='none'" title="Translate">
+    <button class="btn-ghost lang-btn" onclick="LangPanel.open()" title="Translate">
       🌐 Language
     </button>
   </nav>

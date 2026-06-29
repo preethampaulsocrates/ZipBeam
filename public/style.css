@@ -996,20 +996,68 @@ body {
 .btn-print-now:hover { opacity: 0.9; transform: translateY(-1px); }
 .btn-print-now:active { transform: translateY(0); }
 
-/* ─── Google Translate ────────────────────────────────── */
-#google-translate-el {
-  display: inline-flex;
+/* ─── Language Panel (Google Translate) ──────────────────
+   Clicking "Language" opens a ribbon sliding in from the left,
+   with the language list anchored on the left inside it. */
+.lang-panel-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15,23,42,0);
+  z-index: 500;
+  display: flex;
+  justify-content: flex-start;
+  transition: background 0.25s ease;
+}
+.lang-panel-overlay.open { background: rgba(15,23,42,0.35); }
+.lang-panel {
+  width: 300px;
+  max-width: 85vw;
+  height: 100%;
+  background: var(--card);
+  box-shadow: var(--shadow-md);
+  transform: translateX(-100%);
+  transition: transform 0.25s ease;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+}
+.lang-panel-overlay.open .lang-panel { transform: translateX(0); }
+.lang-panel-header {
+  display: flex;
   align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 15px;
+  margin-bottom: 18px;
+  color: var(--text);
+}
+.lang-panel-close {
+  background: var(--gray-50);
+  border: none;
+  border-radius: 8px;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  color: var(--gray-500);
+  font-size: 14px;
+}
+.lang-panel-close:hover { color: var(--text); }
+#google-translate-el {
+  display: flex;
+  justify-content: flex-start;
 }
 #google-translate-el .goog-te-gadget-simple {
   background: transparent !important;
   border: 1px solid var(--border) !important;
   border-radius: 8px !important;
-  padding: 5px 10px !important;
-  font-size: 13px !important;
+  padding: 8px 12px !important;
+  font-size: 14px !important;
   font-family: inherit !important;
   cursor: pointer;
   color: var(--text) !important;
+  width: 100%;
+  text-align: left !important;
 }
 #google-translate-el .goog-te-gadget-simple span,
 #google-translate-el .goog-te-gadget-simple .goog-te-menu-value span {

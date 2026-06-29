@@ -61,6 +61,23 @@ const Toast = {
   info:    (m) => Toast.show(m, 'info',     '💡'),
 };
 
+// ─── Language Panel — left-side slide-in ribbon for Google Translate ─────────
+const LangPanel = (() => {
+  function open() {
+    const overlay = document.getElementById('lang-panel-overlay');
+    if (!overlay) return;
+    overlay.style.display = 'flex';
+    requestAnimationFrame(() => overlay.classList.add('open'));
+  }
+  function close() {
+    const overlay = document.getElementById('lang-panel-overlay');
+    if (!overlay) return;
+    overlay.classList.remove('open');
+    setTimeout(() => { overlay.style.display = 'none'; }, 250);
+  }
+  return { open, close };
+})();
+
 // ─── Desktop Module ───────────────────────────────────────────────────────────
 const Desktop = (() => {
   let sessionId = null;
