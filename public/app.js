@@ -298,16 +298,18 @@ const Desktop = (() => {
     const frame = document.getElementById('print-frame');
     try {
       frame.contentWindow.focus();
+      // Wait for the print dialog to close before marking done and cleaning up
+      frame.contentWindow.addEventListener('afterprint', function onAfterPrint() {
+        frame.contentWindow.removeEventListener('afterprint', onAfterPrint);
+        const fileId = frame._fileId;
+        if (fileId && files[fileId]) files[fileId].downloaded = true;
+        renderFiles();
+        closePrintModal();
+      }, { once: true });
       frame.contentWindow.print();
     } catch {
       Toast.error('Print failed — browser blocked it.');
-      return;
     }
-    // Mark as printed and close modal after a short delay
-    const fileId = frame._fileId;
-    if (fileId && files[fileId]) files[fileId].downloaded = true;
-    renderFiles();
-    setTimeout(closePrintModal, 400);
   }
 
   function closePrintModal() {
