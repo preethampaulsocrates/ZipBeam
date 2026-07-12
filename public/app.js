@@ -658,6 +658,19 @@ const Account = (() => {
     navigator.clipboard?.writeText(user.id).then(() => Toast.success('ZipBeam ID copied!')).catch(() => Toast.show('ID: ' + user.id));
   }
 
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  }
+
   function downloadMyQr() {
     if (!user) return;
     const wrap = document.getElementById('my-uid-qr-offscreen');
@@ -665,23 +678,114 @@ const Account = (() => {
     wrap.innerHTML = '';
     const url = `${location.origin}/u/${user.id}`;
     new QRCode(wrap, {
-      text: url, width: 600, height: 600,
+      text: url, width: 500, height: 500,
       colorDark: '#0F172A', colorLight: '#FFFFFF',
       correctLevel: QRCode.CorrectLevel.H
     });
-    // QRCode.js renders async into a canvas (or an img as fallback) — give it a tick
     setTimeout(() => {
-      const canvas = wrap.querySelector('canvas');
-      const img = wrap.querySelector('img');
-      const dataUrl = canvas ? canvas.toDataURL('image/png') : (img ? img.src : null);
-      if (!dataUrl) { Toast.error('Could not generate QR code'); return; }
+      const qrCanvas = wrap.querySelector('canvas');
+      const qrImg   = wrap.querySelector('img');
+      if (!qrCanvas && !qrImg) { Toast.error('Could not generate QR code'); return; }
+
+      const W = 700, H = 980;
+      const c = document.createElement('canvas');
+      c.width = W; c.height = H;
+      const ctx = c.getContext('2d');
+
+      // Background: deep navy
+      ctx.fillStyle = '#0F172A';
+      ctx.fillRect(0, 0, W, H);
+
+      // Top gradient banner
+      const grad = ctx.createLinearGradient(0, 0, W, 180);
+      grad.addColorStop(0, '#22D3EE');
+      grad.addColorStop(1, '#A855F7');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, W, 180);
+
+      // Logo rounded rect
+      const logoSize = 72, logoX = W / 2 - 36, logoY = 30;
+      ctx.save();
+      ctx.beginPath();
+      roundRect(ctx, logoX, logoY, logoSize, logoSize, 20);
+      ctx.fillStyle = 'rgba(255,255,255,0.25)';
+      ctx.fill();
+      // Lightning bolt
+      ctx.fillStyle = '#FFFFFF';
+      ctx.beginPath();
+      const ox = logoX, oy = logoY, s = logoSize;
+      ctx.moveTo(ox+s*0.56, oy+s*0.18); ctx.lineTo(ox+s*0.29, oy+s*0.53);
+      ctx.lineTo(ox+s*0.50, oy+s*0.53); ctx.lineTo(ox+s*0.44, oy+s*0.82);
+      ctx.lineTo(ox+s*0.79, oy+s*0.41); ctx.lineTo(ox+s*0.56, oy+s*0.41);
+      ctx.closePath(); ctx.fill();
+      ctx.restore();
+
+      // ZipBeam wordmark
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 38px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('ZipBeam', W / 2, logoY + logoSize + 36);
+
+      // White card
+      const cardX = 40, cardY = 195, cardW = W - 80, cardH = H - 235;
+      ctx.save();
+      ctx.beginPath();
+      roundRect(ctx, cardX, cardY, cardW, cardH, 28);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fill();
+      ctx.restore();
+
+      // "SCAN & SEND FILES"
+      ctx.fillStyle = '#4F46E5';
+      ctx.font = 'bold 32px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('SCAN & SEND FILES', W / 2, cardY + 58);
+
+      // Subtitle
+      ctx.fillStyle = '#64748B';
+      ctx.font = '16px sans-serif';
+      ctx.fillText('No app  ·  No signup  ·  Instant transfer', W / 2, cardY + 88);
+
+      // QR code image
+      const qrSize = 420, qrX = (W - qrSize) / 2, qrY = cardY + 112;
+      if (qrCanvas) ctx.drawImage(qrCanvas, qrX, qrY, qrSize, qrSize);
+      else { const i = new Image(); i.src = qrImg.src; ctx.drawImage(i, qrX, qrY, qrSize, qrSize); }
+
+      // Divider
+      const divY = qrY + qrSize + 24;
+      ctx.strokeStyle = '#E2E8F0'; ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(cardX + 40, divY); ctx.lineTo(cardX + cardW - 40, divY);
+      ctx.stroke();
+
+      // "Send files to" label
+      ctx.fillStyle = '#94A3B8';
+      ctx.font = '15px sans-serif';
+      ctx.fillText('Send files to', W / 2, divY + 32);
+
+      // User name
+      ctx.fillStyle = '#0F172A';
+      ctx.font = 'bold 26px sans-serif';
+      ctx.fillText(user.name || 'ZipBeam User', W / 2, divY + 66);
+
+      // ZipBeam ID
+      ctx.fillStyle = '#4F46E5';
+      ctx.font = '600 18px sans-serif';
+      ctx.fillText('ID: ' + user.id, W / 2, divY + 98);
+
+      // Footer URL
+      ctx.fillStyle = '#94A3B8';
+      ctx.font = '13px sans-serif';
+      ctx.fillText('zipbeam.in', W / 2, H - 22);
+
+      const dataUrl = c.toDataURL('image/png');
       const a = document.createElement('a');
       a.href = dataUrl;
       a.download = `zipbeam-qr-${user.id}.png`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      Toast.success('QR code downloaded — print it and display it anywhere');
+      Toast.success('QR poster downloaded — print it and display it anywhere');
     }, 150);
   }
 
