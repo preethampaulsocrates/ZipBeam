@@ -727,18 +727,18 @@ const Account = (() => {
       ctx.save();
       ctx.beginPath();
       roundRect(ctx, cardX, cardY, cardW, cardH, 28);
-      ctx.fillStyle = '#FFFFFF';
+      ctx.fillStyle = '#0F172A';
       ctx.fill();
       ctx.restore();
 
       // Heading
-      ctx.fillStyle = '#4F46E5';
+      ctx.fillStyle = '#22D3EE';
       ctx.font = 'bold 32px sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText('SCAN & SEND FILES', W / 2, cardY + 58);
 
       // Subtitle
-      ctx.fillStyle = '#64748B';
+      ctx.fillStyle = '#94A3B8';
       ctx.font = '16px sans-serif';
       ctx.fillText('No app  ·  No signup  ·  Instant transfer', W / 2, cardY + 90);
 
@@ -748,25 +748,25 @@ const Account = (() => {
 
       // Divider
       const divY = qrY + qrSize + 24;
-      ctx.strokeStyle = '#E2E8F0'; ctx.lineWidth = 1;
+      ctx.strokeStyle = '#334155'; ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(cardX + 40, divY); ctx.lineTo(cardX + cardW - 40, divY);
       ctx.stroke();
 
       // Labels
-      ctx.fillStyle = '#94A3B8';
+      ctx.fillStyle = '#64748B';
       ctx.font = '15px sans-serif';
       ctx.fillText('Send files to', W / 2, divY + 34);
 
-      ctx.fillStyle = '#0F172A';
+      ctx.fillStyle = '#E2E8F0';
       ctx.font = 'bold 26px sans-serif';
       ctx.fillText(user.name || 'ZipBeam User', W / 2, divY + 68);
 
-      ctx.fillStyle = '#4F46E5';
+      ctx.fillStyle = '#A855F7';
       ctx.font = 'bold 18px sans-serif';
       ctx.fillText('ID: ' + user.id, W / 2, divY + 100);
 
-      ctx.fillStyle = '#94A3B8';
+      ctx.fillStyle = '#475569';
       ctx.font = '13px sans-serif';
       ctx.fillText('zipbeam.in', W / 2, H - 22);
 
