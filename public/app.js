@@ -684,28 +684,24 @@ const Account = (() => {
     });
 
     function drawPoster(qrSource) {
-      const W = 700, H = 980;
+      const W = 700, H = 1020;
       const c = document.createElement('canvas');
       c.width = W; c.height = H;
       const ctx = c.getContext('2d');
 
-      // Background
-      ctx.fillStyle = '#0F172A';
+      // Full gradient background
+      const bg = ctx.createLinearGradient(0, 0, W, H);
+      bg.addColorStop(0, '#22D3EE');
+      bg.addColorStop(1, '#A855F7');
+      ctx.fillStyle = bg;
       ctx.fillRect(0, 0, W, H);
 
-      // Gradient banner
-      const grad = ctx.createLinearGradient(0, 0, W, 180);
-      grad.addColorStop(0, '#22D3EE');
-      grad.addColorStop(1, '#A855F7');
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, W, 180);
-
       // Logo box
-      const logoSize = 72, logoX = W / 2 - 36, logoY = 30;
+      const logoSize = 72, logoX = W / 2 - 36, logoY = 28;
       ctx.save();
       ctx.beginPath();
       roundRect(ctx, logoX, logoY, logoSize, logoSize, 20);
-      ctx.fillStyle = 'rgba(255,255,255,0.25)';
+      ctx.fillStyle = 'rgba(255,255,255,0.30)';
       ctx.fill();
       ctx.fillStyle = '#FFFFFF';
       ctx.beginPath();
@@ -718,57 +714,68 @@ const Account = (() => {
 
       // Wordmark
       ctx.fillStyle = '#FFFFFF';
-      ctx.font = 'bold 38px sans-serif';
+      ctx.font = 'bold 36px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('ZipBeam', W / 2, logoY + logoSize + 36);
+      ctx.fillText('ZipBeam', W / 2, logoY + logoSize + 34);
 
       // White card
-      const cardX = 40, cardY = 195, cardW = W - 80, cardH = H - 235;
+      const cardX = 36, cardY = 190, cardW = W - 72, cardH = H - 230;
       ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,0.18)';
+      ctx.shadowBlur = 32;
+      ctx.shadowOffsetY = 8;
       ctx.beginPath();
       roundRect(ctx, cardX, cardY, cardW, cardH, 28);
-      ctx.fillStyle = '#0F172A';
+      ctx.fillStyle = '#FFFFFF';
       ctx.fill();
       ctx.restore();
 
       // Heading
-      ctx.fillStyle = '#22D3EE';
-      ctx.font = 'bold 32px sans-serif';
+      ctx.fillStyle = '#4F46E5';
+      ctx.font = 'bold 30px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('SCAN & SEND FILES', W / 2, cardY + 58);
+      ctx.fillText('SCAN & SEND FILES', W / 2, cardY + 52);
 
       // Subtitle
-      ctx.fillStyle = '#94A3B8';
-      ctx.font = '16px sans-serif';
-      ctx.fillText('No app  ·  No signup  ·  Instant transfer', W / 2, cardY + 90);
+      ctx.fillStyle = '#64748B';
+      ctx.font = '15px sans-serif';
+      ctx.fillText('No app  ·  No signup  ·  Instant transfer', W / 2, cardY + 80);
 
       // QR code
-      const qrSize = 420, qrX = (W - qrSize) / 2, qrY = cardY + 114;
+      const qrSize = 400, qrX = (W - qrSize) / 2, qrY = cardY + 104;
       ctx.drawImage(qrSource, qrX, qrY, qrSize, qrSize);
 
       // Divider
-      const divY = qrY + qrSize + 24;
-      ctx.strokeStyle = '#334155'; ctx.lineWidth = 1;
+      const divY = qrY + qrSize + 20;
+      ctx.strokeStyle = '#E2E8F0'; ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(cardX + 40, divY); ctx.lineTo(cardX + cardW - 40, divY);
       ctx.stroke();
 
-      // Labels
+      // "Send files to" label
+      ctx.fillStyle = '#94A3B8';
+      ctx.font = '14px sans-serif';
+      ctx.fillText('Send files to', W / 2, divY + 30);
+
+      // User name
+      ctx.fillStyle = '#0F172A';
+      ctx.font = 'bold 24px sans-serif';
+      ctx.fillText(user.name || 'ZipBeam User', W / 2, divY + 62);
+
+      // ZipBeam ID
+      ctx.fillStyle = '#4F46E5';
+      ctx.font = 'bold 16px sans-serif';
+      ctx.fillText('ID: ' + user.id, W / 2, divY + 90);
+
+      // Safety message
       ctx.fillStyle = '#64748B';
-      ctx.font = '15px sans-serif';
-      ctx.fillText('Send files to', W / 2, divY + 34);
-
-      ctx.fillStyle = '#E2E8F0';
-      ctx.font = 'bold 26px sans-serif';
-      ctx.fillText(user.name || 'ZipBeam User', W / 2, divY + 68);
-
-      ctx.fillStyle = '#A855F7';
-      ctx.font = 'bold 18px sans-serif';
-      ctx.fillText('ID: ' + user.id, W / 2, divY + 100);
-
-      ctx.fillStyle = '#475569';
       ctx.font = '13px sans-serif';
-      ctx.fillText('zipbeam.in', W / 2, H - 22);
+      ctx.fillText('We use ZipBeam to ensure your files are safe & secure.', W / 2, divY + 118);
+
+      // Footer on gradient
+      ctx.fillStyle = 'rgba(255,255,255,0.75)';
+      ctx.font = '13px sans-serif';
+      ctx.fillText('zipbeam.in', W / 2, H - 18);
 
       const dataUrl = c.toDataURL('image/png');
       const a = document.createElement('a');
