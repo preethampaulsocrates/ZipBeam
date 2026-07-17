@@ -767,12 +767,13 @@ const Account = (() => {
       ctx.font = 'bold 16px sans-serif';
       ctx.fillText('ID: ' + user.id, W / 2, divY + 86);
 
-      // Safety message — large, two lines, italic style
-      const safeY = divY + 122;
+      // Safety message — 3 lines, large italic serif
+      const safeY = divY + 130;
       ctx.fillStyle = '#1E293B';
-      ctx.font = 'italic bold 18px Georgia, serif';
-      ctx.fillText('"Your files are safe &', W / 2, safeY);
-      ctx.fillText('secure with ZipBeam."', W / 2, safeY + 28);
+      ctx.font = 'italic bold 26px Georgia, serif';
+      ctx.fillText('We use ZipBeam to', W / 2, safeY);
+      ctx.fillText('ensure your files are', W / 2, safeY + 40);
+      ctx.fillText('safe & secure.', W / 2, safeY + 80);
 
       // Footer on gradient
       ctx.fillStyle = 'rgba(255,255,255,0.75)';
