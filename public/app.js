@@ -760,17 +760,19 @@ const Account = (() => {
       // User name
       ctx.fillStyle = '#0F172A';
       ctx.font = 'bold 24px sans-serif';
-      ctx.fillText(user.name || 'ZipBeam User', W / 2, divY + 62);
+      ctx.fillText(user.name || 'ZipBeam User', W / 2, divY + 60);
 
       // ZipBeam ID
       ctx.fillStyle = '#4F46E5';
       ctx.font = 'bold 16px sans-serif';
-      ctx.fillText('ID: ' + user.id, W / 2, divY + 90);
+      ctx.fillText('ID: ' + user.id, W / 2, divY + 86);
 
-      // Safety message
-      ctx.fillStyle = '#64748B';
-      ctx.font = '13px sans-serif';
-      ctx.fillText('We use ZipBeam to ensure your files are safe & secure.', W / 2, divY + 118);
+      // Safety message — large, two lines, italic style
+      const safeY = divY + 122;
+      ctx.fillStyle = '#1E293B';
+      ctx.font = 'italic bold 18px Georgia, serif';
+      ctx.fillText('"Your files are safe &', W / 2, safeY);
+      ctx.fillText('secure with ZipBeam."', W / 2, safeY + 28);
 
       // Footer on gradient
       ctx.fillStyle = 'rgba(255,255,255,0.75)';
