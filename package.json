@@ -7,8 +7,18 @@
     "start": "node server.js",
     "dev": "node --watch server.js"
   },
-  "keywords": ["file-transfer", "qr-code", "airdrop-alternative", "zero-dependency"],
+  "keywords": [
+    "file-transfer",
+    "qr-code",
+    "airdrop-alternative",
+    "zero-dependency"
+  ],
   "author": "ZipBeam",
   "license": "MIT",
-  "engines": { "node": ">=18.0.0" }
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "pg": "^8.22.0"
+  }
 }

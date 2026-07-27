@@ -30,6 +30,8 @@ function verifyGoogleIdToken(idToken) {
   });
 }
 
+const { Pool } = require('pg');
+
 const PORT        = process.env.PORT || 3000;
 const UPLOAD_DIR  = path.join(__dirname, 'uploads');
 const PUBLIC_DIR  = path.join(__dirname, 'public');
@@ -40,44 +42,67 @@ const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 if (!fs.existsSync(DATA_DIR))   fs.mkdirSync(DATA_DIR,   { recursive: true });
 
+// ─── PostgreSQL pool ──────────────────────────────────────────────────────────
+const db = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
+});
+
+async function initDb() {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      data JSONB NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS auth_tokens (
+      token TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      expires_at BIGINT NOT NULL
+    );
+  `);
+  const { rows } = await db.query('SELECT data FROM users');
+  for (const row of rows) users.set(row.data.id, row.data);
+  const { rows: tokens } = await db.query(
+    'SELECT token, user_id, expires_at FROM auth_tokens WHERE expires_at > $1', [Date.now()]
+  );
+  for (const t of tokens) authTokens.set(t.token, { userId: t.user_id, expiresAt: Number(t.expires_at) });
+  console.log(`  🗄️  DB ready — ${rows.length} users loaded`);
+}
+
 // ─── In-memory stores ─────────────────────────────────────────────────────────
-const sessions   = new Map(); // sessionId → { id, expiresAt, files:[], kind?, toUserId?, fromUserId? }
-const fileStore  = new Map(); // fileId    → { id, sessionId, name, size, mime, diskPath, uploadedAt }
-const sseClients = new Map(); // sessionId → Set of res objects (desktop listeners)
-const sseUserClients = new Map(); // userId → Set of res objects (logged-in inbox listeners)
-const users      = new Map(); // userId    → { id, name, email, passwordHash, salt, role, credits, createdAt, googleId?, recentContacts:[] }
-const authTokens = new Map(); // token     → { userId, expiresAt }
-const DELIVERY_TTL = 24 * 60 * 60 * 1000; // 24h — direct user-to-user / shop QR deliveries
+const sessions   = new Map();
+const fileStore  = new Map();
+const sseClients = new Map();
+const sseUserClients = new Map();
+const users      = new Map();
+const authTokens = new Map();
+const DELIVERY_TTL = 24 * 60 * 60 * 1000;
 
 // ─── User / Auth persistence ──────────────────────────────────────────────────
-const USERS_FILE = path.join(DATA_DIR, 'users.json');
-const AUTH_FILE  = path.join(DATA_DIR, 'auth.json');
-const AUTH_TTL   = 7 * 24 * 60 * 60 * 1000; // 7 days
+const AUTH_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
 
+async function saveUser(u) {
+  try {
+    await db.query(
+      'INSERT INTO users (id, data) VALUES ($1, $2) ON CONFLICT (id) DO UPDATE SET data = $2',
+      [u.id, JSON.stringify(u)]
+    );
+  } catch (e) { console.error('saveUser error:', e.message); }
+}
 function saveUsers() {
-  try { fs.writeFileSync(USERS_FILE, JSON.stringify([...users.values()])); } catch {}
+  for (const u of users.values()) saveUser(u);
 }
-function loadUsers() {
+async function saveAuthToken(token, record) {
   try {
-    if (!fs.existsSync(USERS_FILE)) return;
-    for (const u of JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'))) users.set(u.id, u);
-  } catch {}
+    await db.query(
+      'INSERT INTO auth_tokens (token, user_id, expires_at) VALUES ($1, $2, $3) ON CONFLICT (token) DO UPDATE SET expires_at = $3',
+      [token, record.userId, record.expiresAt]
+    );
+  } catch (e) { console.error('saveAuthToken error:', e.message); }
 }
-function saveAuthTokens() {
-  try { fs.writeFileSync(AUTH_FILE, JSON.stringify([...authTokens.entries()])); } catch {}
+async function deleteAuthToken(token) {
+  try { await db.query('DELETE FROM auth_tokens WHERE token = $1', [token]); } catch {}
 }
-function loadAuthTokens() {
-  try {
-    if (!fs.existsSync(AUTH_FILE)) return;
-    const now = Date.now();
-    for (const [t, d] of JSON.parse(fs.readFileSync(AUTH_FILE, 'utf8'))) {
-      if (now < d.expiresAt) authTokens.set(t, d);
-    }
-  } catch {}
-}
-
-loadUsers();
-loadAuthTokens();
 
 function hashPw(pw, salt) {
   return new Promise((res, rej) => {
@@ -129,10 +154,12 @@ async function ensureAdmin() {
   const { hash, salt } = await hashPw(pw);
   const admin = { id: crypto.randomBytes(8).toString('hex'), name: 'Admin', email: email.toLowerCase(), passwordHash: hash, salt, role: 'admin', credits: 999999, createdAt: Date.now() };
   users.set(admin.id, admin);
-  saveUsers();
+  await saveUser(admin);
   console.log(`  👤 Admin account ready: ${email}`);
 }
-ensureAdmin();
+
+// Boot: init DB then ensure admin
+initDb().then(() => ensureAdmin()).catch(e => { console.error('DB init failed:', e.message); });
 
 // ─── Session persistence ──────────────────────────────────────────────────────
 function saveSessions() {
@@ -355,10 +382,11 @@ const server = http.createServer(async (req, res) => {
     const { hash, salt } = await hashPw(password);
     const user = { id: crypto.randomBytes(8).toString('hex'), name: name.trim(), email: email.toLowerCase().trim(), passwordHash: hash, salt, role: 'user', credits: 200, createdAt: Date.now() };
     users.set(user.id, user);
-    saveUsers();
+    await saveUser(user);
     const token = crypto.randomBytes(32).toString('hex');
-    authTokens.set(token, { userId: user.id, expiresAt: Date.now() + AUTH_TTL });
-    saveAuthTokens();
+    const tokenRecord = { userId: user.id, expiresAt: Date.now() + AUTH_TTL };
+    authTokens.set(token, tokenRecord);
+    await saveAuthToken(token, tokenRecord);
     res.writeHead(200, { 'Content-Type': 'application/json', 'Set-Cookie': authCookie(token), 'Access-Control-Allow-Origin': '*' });
     return res.end(JSON.stringify({ user: safeUser(user) }));
   }
@@ -373,8 +401,9 @@ const server = http.createServer(async (req, res) => {
     for (const u of users.values()) if (u.email === email.toLowerCase().trim()) { found = u; break; }
     if (!found || !(await verifyPw(password, found.passwordHash, found.salt))) return json(res, 401, { error: 'Invalid email or password' });
     const token = crypto.randomBytes(32).toString('hex');
-    authTokens.set(token, { userId: found.id, expiresAt: Date.now() + AUTH_TTL });
-    saveAuthTokens();
+    const tokenRecord = { userId: found.id, expiresAt: Date.now() + AUTH_TTL };
+    authTokens.set(token, tokenRecord);
+    await saveAuthToken(token, tokenRecord);
     res.writeHead(200, { 'Content-Type': 'application/json', 'Set-Cookie': authCookie(token), 'Access-Control-Allow-Origin': '*' });
     return res.end(JSON.stringify({ user: safeUser(found) }));
   }
@@ -405,10 +434,11 @@ const server = http.createServer(async (req, res) => {
     } else if (!user.googleId) {
       user.googleId = payload.sub;
     }
-    saveUsers();
+    await saveUser(user);
     const token = crypto.randomBytes(32).toString('hex');
-    authTokens.set(token, { userId: user.id, expiresAt: Date.now() + AUTH_TTL });
-    saveAuthTokens();
+    const tokenRecord = { userId: user.id, expiresAt: Date.now() + AUTH_TTL };
+    authTokens.set(token, tokenRecord);
+    await saveAuthToken(token, tokenRecord);
     res.writeHead(200, { 'Content-Type': 'application/json', 'Set-Cookie': authCookie(token), 'Access-Control-Allow-Origin': '*' });
     return res.end(JSON.stringify({ user: safeUser(user) }));
   }
@@ -416,7 +446,7 @@ const server = http.createServer(async (req, res) => {
   // ── API: Auth — logout ──
   if (method === 'POST' && pathname === '/api/auth/logout') {
     const token = parseCookies(req).st;
-    if (token) { authTokens.delete(token); saveAuthTokens(); }
+    if (token) { authTokens.delete(token); deleteAuthToken(token); }
     res.writeHead(200, { 'Content-Type': 'application/json', 'Set-Cookie': 'st=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0', 'Access-Control-Allow-Origin': '*' });
     return res.end(JSON.stringify({ ok: true }));
   }
@@ -470,7 +500,7 @@ const server = http.createServer(async (req, res) => {
 
     if (fromUser) {
       addRecentContact(fromUser, toUser.id, toUser.name);
-      saveUsers();
+      saveUser(fromUser);
     }
     return json(res, 200, { deliveryId, toUser: { id: toUser.id, name: toUser.name } });
   }
