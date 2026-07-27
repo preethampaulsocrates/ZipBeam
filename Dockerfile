@@ -5,7 +5,11 @@ RUN addgroup -S zipbeam && adduser -S zipbeam -G zipbeam
 
 WORKDIR /app
 
-# Copy app files (zero npm dependencies — nothing to install)
+# Install dependencies
+COPY package*.json ./
+RUN npm ci
+
+# Copy app files
 COPY --chown=zipbeam:zipbeam . .
 
 # Create uploads/data directories and hand the whole app dir to zipbeam,
