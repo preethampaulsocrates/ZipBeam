@@ -928,9 +928,10 @@ const Account = (() => {
   const p = window.location.pathname;
   const m = p.match(/^\/s\/([A-Z0-9]+)$/i);
   if (m) {
-    // Mobile — no auth needed
+    // Mobile — no auth needed, but signup is available (optional)
     document.getElementById('app-mobile').style.display = 'flex';
     Mobile.init(m[1]);
+    Auth.initGoogleButton();
   } else {
     // Desktop — open access, no login required. Show user info only if logged in.
     const el = document.getElementById('nav-user');
