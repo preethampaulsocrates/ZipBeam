@@ -1786,3 +1786,299 @@ body {
   font-weight: 600;
   cursor: pointer;
 }
+
+/* ═══════════════════════════════════════════════════════
+   FUTURISTIC UI LAYER — light glassmorphism + animations
+   (pure visual overrides; no structural/functional change)
+════════════════════════════════════════════════════════ */
+
+:root {
+  --grad: linear-gradient(135deg, #06B6D4 0%, #4F46E5 55%, #7C3AED 100%);
+  --grad-flow: linear-gradient(115deg, #06B6D4, #4F46E5, #A855F7, #EC4899, #06B6D4);
+  --glass: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.9);
+  --shadow-sm: 0 4px 16px rgba(79,70,229,0.10), 0 2px 8px rgba(6,182,212,0.05);
+  --shadow-md: 0 8px 32px rgba(79,70,229,0.13), 0 4px 16px rgba(6,182,212,0.07);
+  --shadow-lg: 0 24px 64px rgba(79,70,229,0.16), 0 8px 32px rgba(6,182,212,0.08);
+}
+
+/* ── Aurora background — soft drifting pastel lights ── */
+body {
+  background: #F6F8FE;
+}
+body::before {
+  content: '';
+  position: fixed;
+  inset: -20%;
+  z-index: -2;
+  pointer-events: none;
+  background:
+    radial-gradient(38% 34% at 22% 24%, rgba(6,182,212,0.14), transparent 70%),
+    radial-gradient(42% 38% at 78% 18%, rgba(124,58,237,0.13), transparent 70%),
+    radial-gradient(36% 40% at 68% 78%, rgba(236,72,153,0.09), transparent 70%),
+    radial-gradient(40% 36% at 18% 80%, rgba(79,70,229,0.11), transparent 70%);
+  filter: blur(48px);
+  animation: aurora 26s ease-in-out infinite alternate;
+}
+@keyframes aurora {
+  0%   { transform: translate(0, 0) rotate(0deg) scale(1); }
+  50%  { transform: translate(3%, -2%) rotate(4deg) scale(1.06); }
+  100% { transform: translate(-3%, 2%) rotate(-4deg) scale(1.02); }
+}
+
+/* ── Glass cards with animated gradient top edge ── */
+.card {
+  background: var(--glass);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255,255,255,0.9);
+  transition: transform 0.3s cubic-bezier(0.16,1,0.3,1), box-shadow 0.3s;
+}
+.card:hover {
+  box-shadow: var(--shadow-lg), inset 0 1px 0 rgba(255,255,255,0.9);
+}
+.card::before {
+  height: 2px;
+  background: var(--grad-flow);
+  background-size: 300% 100%;
+  animation: edgeFlow 6s linear infinite;
+  opacity: 0.7;
+}
+@keyframes edgeFlow {
+  from { background-position: 0% 0; }
+  to   { background-position: 300% 0; }
+}
+
+/* ── Navbar — floating glass ── */
+.navbar {
+  background: rgba(255,255,255,0.6);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  border-bottom: 1px solid rgba(255,255,255,0.8);
+  box-shadow: 0 4px 24px rgba(79,70,229,0.06);
+}
+.navbar::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: -1px;
+  height: 1.5px;
+  background: var(--grad-flow);
+  background-size: 300% 100%;
+  animation: edgeFlow 8s linear infinite;
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+/* ── Hero — flowing gradient headline ── */
+.gradient-text,
+.logo-text {
+  background: var(--grad-flow);
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: textFlow 7s linear infinite;
+}
+@keyframes textFlow {
+  from { background-position: 0% 0; }
+  to   { background-position: 300% 0; }
+}
+
+/* ── QR frame — rotating holo ring ── */
+@property --qr-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+.qr-frame {
+  border: 1.5px solid transparent;
+  background:
+    linear-gradient(#fff, #fff) padding-box,
+    conic-gradient(from var(--qr-angle), #06B6D4, #4F46E5, #A855F7, #EC4899, #06B6D4) border-box;
+  animation: qrGlow 3s ease-in-out infinite, qrSpin 7s linear infinite;
+}
+@keyframes qrSpin {
+  to { --qr-angle: 360deg; }
+}
+
+/* ── Session code — gradient mono ── */
+.session-code {
+  background: var(--grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.session-info {
+  background: rgba(255,255,255,0.65);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(79,70,229,0.14);
+}
+
+/* ── Buttons — lift + shine ── */
+.btn-dl, .btn-qr-download, .auth-submit, .btn-send {
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 4px 14px rgba(79,70,229,0.25);
+  transition: transform 0.22s cubic-bezier(0.16,1,0.3,1), box-shadow 0.22s, opacity 0.15s;
+}
+.btn-dl:hover, .btn-qr-download:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(79,70,229,0.35);
+  opacity: 1;
+}
+.btn-dl::after, .btn-qr-download::after {
+  content: '';
+  position: absolute;
+  top: 0; left: -75%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(120deg, transparent, rgba(255,255,255,0.4), transparent);
+  transform: skewX(-20deg);
+  transition: left 0.5s ease;
+}
+.btn-dl:hover::after, .btn-qr-download:hover::after { left: 125%; }
+.btn-dl.saved { box-shadow: none; }
+.btn-dl.saved:hover { transform: none; }
+
+.btn-ghost {
+  background: rgba(255,255,255,0.55);
+  backdrop-filter: blur(10px);
+  border-color: rgba(79,70,229,0.16);
+}
+.btn-ghost:hover {
+  border-color: var(--indigo);
+  box-shadow: 0 4px 16px rgba(79,70,229,0.15);
+  transform: translateY(-1px);
+}
+
+/* ── File items — glass tiles ── */
+.file-item {
+  background: rgba(255,255,255,0.65);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,0.85);
+  box-shadow: 0 2px 10px rgba(79,70,229,0.05);
+}
+.file-icon {
+  background: linear-gradient(135deg, rgba(6,182,212,0.10), rgba(124,58,237,0.10));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.8);
+}
+
+/* ── Sender groups — glass ── */
+.sender-group {
+  background: rgba(255,255,255,0.55);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.85);
+  box-shadow: 0 4px 18px rgba(79,70,229,0.07);
+  transition: transform 0.25s cubic-bezier(0.16,1,0.3,1), box-shadow 0.25s;
+}
+.sender-group:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 28px rgba(79,70,229,0.13);
+}
+.sender-group-avatar {
+  box-shadow: 0 3px 10px rgba(79,70,229,0.3);
+}
+
+/* ── Step cards — glass float with staggered entrance ── */
+.step-card {
+  background: var(--glass);
+  backdrop-filter: blur(16px) saturate(150%);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.3s cubic-bezier(0.16,1,0.3,1), box-shadow 0.3s;
+  animation: cardRise 0.6s cubic-bezier(0.16,1,0.3,1) both;
+}
+.step-card:nth-child(1) { animation-delay: 0.12s; }
+.step-card:nth-child(3) { animation-delay: 0.22s; }
+.step-card:nth-child(5) { animation-delay: 0.32s; }
+.step-card:hover {
+  transform: translateY(-5px);
+  box-shadow: var(--shadow-md);
+}
+.step-num {
+  box-shadow: 0 4px 14px rgba(79,70,229,0.3);
+}
+
+/* ── Account bar — glass ── */
+.account-bar-toggle {
+  background: var(--glass);
+  backdrop-filter: blur(16px) saturate(150%);
+  border: 1px solid rgba(255,255,255,0.9);
+  box-shadow: var(--shadow-sm);
+}
+.account-bar-toggle:hover {
+  border-color: rgba(79,70,229,0.35);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+.account-panel {
+  backdrop-filter: blur(16px) saturate(150%);
+}
+
+/* ── Auth inputs — soft focus glow ── */
+.auth-input:focus {
+  border-color: #4F46E5;
+  box-shadow: 0 0 0 3px rgba(79,70,229,0.13);
+}
+
+/* ── Footer — glass ── */
+.footer {
+  background: rgba(255,255,255,0.55);
+  backdrop-filter: blur(20px) saturate(160%);
+  border-top: 1px solid rgba(255,255,255,0.85);
+}
+
+/* ── Badge shimmer when files arrive ── */
+.badge.has-files {
+  background: linear-gradient(90deg, rgba(16,185,129,0.12), rgba(6,182,212,0.16), rgba(16,185,129,0.12));
+  background-size: 200% 100%;
+  animation: pillSweep 2.5s linear infinite;
+}
+
+/* ── Empty-state icon — gentle float ── */
+.empty-icon-wrap {
+  background: linear-gradient(135deg, rgba(6,182,212,0.10), rgba(124,58,237,0.12));
+  animation: emptyFloat 3.5s ease-in-out infinite;
+  box-shadow: 0 8px 24px rgba(79,70,229,0.10);
+}
+@keyframes emptyFloat {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-7px); }
+}
+
+/* ── Gradient scrollbars ── */
+.files-list::-webkit-scrollbar-thumb,
+.sender-groups::-webkit-scrollbar-thumb,
+.sender-group-files::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #06B6D4, #7C3AED);
+  border-radius: 10px;
+}
+
+/* ── FAQ + blog sections rise in ── */
+.faq-section, .how-it-works {
+  animation: cardRise 0.7s cubic-bezier(0.16,1,0.3,1) both;
+  animation-delay: 0.15s;
+}
+
+/* ── Choice cards (mobile) — glass ── */
+.choice-card {
+  background: var(--glass);
+  backdrop-filter: blur(14px);
+  border: 1.5px solid var(--glass-border);
+  box-shadow: var(--shadow-sm);
+}
+.choice-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-md);
+  border-color: rgba(79,70,229,0.35);
+}
+
+/* ── Reduced motion — disable decorative animation ── */
+@media (prefers-reduced-motion: reduce) {
+  body::before, .card::before, .navbar::after, .gradient-text, .logo-text,
+  .qr-frame, .session-code, .badge.has-files, .empty-icon-wrap,
+  .step-card, .faq-section, .how-it-works {
+    animation: none !important;
+  }
+}
