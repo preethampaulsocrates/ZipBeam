@@ -631,6 +631,9 @@ const server = http.createServer(async (req, res) => {
       const diskPath = path.join(sessDir, diskName);
       fs.writeFileSync(diskPath, part.content);
 
+      const senderId    = fields.senderId    || null;
+      const senderLabel = fields.senderLabel || null;
+
       const info = {
         id: fileId,
         sessionId: sid,
@@ -640,10 +643,12 @@ const server = http.createServer(async (req, res) => {
         diskPath,
         uploadedAt: Date.now(),
         purpose,
+        senderId,
+        senderLabel,
       };
       fileStore.set(fileId, info);
       sess.files.push(fileId);
-      uploadedFiles.push({ id: fileId, name: part.filename, size: part.content.length, mimetype: part.mime, uploadedAt: info.uploadedAt, purpose });
+      uploadedFiles.push({ id: fileId, name: part.filename, size: part.content.length, mimetype: part.mime, uploadedAt: info.uploadedAt, purpose, senderId, senderLabel });
     }
 
     saveSessions();

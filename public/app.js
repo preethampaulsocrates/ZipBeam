@@ -219,11 +219,12 @@ const Desktop = (() => {
     }
     empty.style.display = 'none'; list.style.display = 'flex';
 
-    // Group files by sender (fromName/fromUserId); ungrouped = current session
+    // Group files by sender — use fromUserId (registered), senderId (anonymous), or session fallback
     const groups = new Map();
     for (const f of fileArr) {
-      const key = f.fromUserId || '__session__';
-      if (!groups.has(key)) groups.set(key, { name: f.fromName || 'This Session', files: [] });
+      const key  = f.fromUserId || f.senderId || '__session__';
+      const name = f.fromName   || f.senderLabel || 'This Session';
+      if (!groups.has(key)) groups.set(key, { name, files: [] });
       groups.get(key).files.push(f);
     }
 
@@ -378,6 +379,19 @@ const Mobile = (() => {
   let pendingFiles = [];
   let purpose = 'save'; // 'save' or 'print'
 
+  // Generate a stable anonymous sender ID for this browser tab
+  function getSenderId() {
+    let id = sessionStorage.getItem('zb_sender_id');
+    if (!id) {
+      id = 'anon-' + Math.random().toString(36).slice(2, 10);
+      sessionStorage.setItem('zb_sender_id', id);
+    }
+    return id;
+  }
+  function getSenderLabel() {
+    return sessionStorage.getItem('zb_sender_label') || ('Sender ' + getSenderId().slice(5, 9).toUpperCase());
+  }
+
   async function init(sid) {
     const upper = sid.toUpperCase();
     // Session IDs always carry a prefix (ZIP- for QR sessions, DLV- for direct/shop deliveries)
@@ -481,6 +495,8 @@ const Mobile = (() => {
 
     const formData = new FormData();
     formData.append('purpose', purpose);
+    formData.append('senderId', getSenderId());
+    formData.append('senderLabel', getSenderLabel());
     pendingFiles.forEach(f => formData.append('files', f));
 
     try {
