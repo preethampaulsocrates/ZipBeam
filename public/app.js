@@ -219,7 +219,15 @@ const Desktop = (() => {
     }
     empty.style.display = 'none'; list.style.display = 'flex';
 
-    list.innerHTML = fileArr.map(f => {
+    // Group files by sender (fromName/fromUserId); ungrouped = current session
+    const groups = new Map();
+    for (const f of fileArr) {
+      const key = f.fromUserId || '__session__';
+      if (!groups.has(key)) groups.set(key, { name: f.fromName || 'This Session', files: [] });
+      groups.get(key).files.push(f);
+    }
+
+    function fileCard(f) {
       const safeName = escHtml(f.name).replace(/'/g, "\\'");
       let actionBtn;
       if (f.purpose === 'print') {
@@ -232,20 +240,40 @@ const Desktop = (() => {
           : `<button class="btn-dl" onclick="Desktop.downloadFile('${f.id}','${safeName}')">↓ Download</button>`;
       }
       return `
-      <div class="file-item" id="fi-${f.id}">
-        <div class="file-icon">${fileIcon(f.mimetype, f.name)}</div>
-        <div class="file-info">
-          <div class="file-name">${escHtml(f.name)} ${f.isNew ? '<span class="new-tag">New</span>' : ''} ${f.purpose === 'print' ? '<span class="print-tag">Print only</span>' : ''}</div>
-          <div class="file-meta">
-            <span>${fmtBytes(f.size)}</span>
-            <span>${fmtTime(f.uploadedAt)}</span>
-            <span class="type-tag">${fileTypeName(f.mimetype, f.name)}</span>
+        <div class="file-item" id="fi-${f.id}">
+          <div class="file-icon">${fileIcon(f.mimetype, f.name)}</div>
+          <div class="file-info">
+            <div class="file-name">${escHtml(f.name)} ${f.isNew ? '<span class="new-tag">New</span>' : ''} ${f.purpose === 'print' ? '<span class="print-tag">Print only</span>' : ''}</div>
+            <div class="file-meta">
+              <span>${fmtBytes(f.size)}</span>
+              <span>${fmtTime(f.uploadedAt)}</span>
+              <span class="type-tag">${fileTypeName(f.mimetype, f.name)}</span>
+            </div>
           </div>
-        </div>
-        ${actionBtn}
-      </div>
-    `;
-    }).join('');
+          ${actionBtn}
+        </div>`;
+    }
+
+    if (groups.size === 1) {
+      // Single sender — flat list as before
+      list.className = 'files-list';
+      list.innerHTML = [...groups.values()][0].files.map(fileCard).join('');
+    } else {
+      // Multiple senders — horizontal sliding group cards
+      list.className = 'sender-groups';
+      list.innerHTML = [...groups.entries()].map(([, g]) => {
+        const initial = g.name.charAt(0).toUpperCase();
+        return `
+          <div class="sender-group">
+            <div class="sender-group-header">
+              <div class="sender-group-avatar">${initial}</div>
+              <span class="sender-group-name">${escHtml(g.name)}</span>
+              <span class="sender-group-count">${g.files.length} file${g.files.length !== 1 ? 's' : ''}</span>
+            </div>
+            <div class="sender-group-files">${g.files.map(fileCard).join('')}</div>
+          </div>`;
+      }).join('');
+    }
   }
 
   async function downloadFile(fileId, filename) {
@@ -637,11 +665,26 @@ const Account = (() => {
   let user = null;
   let userEventSource = null;
 
+  function toggleBar() {
+    const wrap  = document.getElementById('account-bar-wrap');
+    const panel = document.getElementById('account-panel');
+    const isOpen = !panel.classList.contains('account-panel-collapsed');
+    if (isOpen) {
+      panel.classList.add('account-panel-collapsed');
+      wrap.classList.remove('account-bar-open');
+    } else {
+      panel.classList.remove('account-panel-collapsed');
+      wrap.classList.add('account-bar-open');
+    }
+  }
+
   function init(u) {
     user = u;
-    const panel = document.getElementById('account-panel');
-    if (!panel) return;
-    panel.style.display = 'block';
+    const wrap = document.getElementById('account-bar-wrap');
+    if (!wrap) return;
+    wrap.style.display = 'block';
+    const nameEl = document.getElementById('account-bar-name');
+    if (nameEl) nameEl.textContent = user.name;
     document.getElementById('my-uid').textContent = user.id;
     const waLink = document.getElementById('my-uid-whatsapp');
     if (waLink) {
@@ -861,7 +904,7 @@ const Account = (() => {
     });
   }
 
-  return { init, copyMyUid, downloadMyQr, sendToUid };
+  return { init, toggleBar, copyMyUid, downloadMyQr, sendToUid };
 })();
 
 // ─── Router (runs last, after modules defined) ────────────────────────────────

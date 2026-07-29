@@ -281,36 +281,50 @@
     <p style="font-size:13px;color:var(--gray-500);margin-top:6px">No app, no cable, no signup — just scan and send.</p>
   </section>
 
-  <!-- ACCOUNT PANEL — direct user-to-user transfers (only visible when logged in) -->
-  <section id="account-panel" class="card account-panel" style="display:none">
-    <div class="card-header">
-      <h2>Your ZipBeam ID</h2>
-      <p>Share it so anyone can send files straight to you</p>
-    </div>
-    <div class="my-uid-row">
-      <code id="my-uid" class="my-uid"></code>
-      <button class="copy-btn" onclick="Account.copyMyUid()" title="Copy ID">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-      </button>
-      <button class="copy-btn" onclick="Account.downloadMyQr()" title="Download QR code">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-      </button>
-      <a id="my-uid-whatsapp" class="btn-ghost" style="font-size:13px" target="_blank" rel="noopener">📤 Share via WhatsApp</a>
-    </div>
+  <!-- ACCOUNT PANEL — collapsible, auto-hide bar (only visible when logged in) -->
+  <div id="account-bar-wrap" style="display:none">
+    <!-- Toggle tab always visible -->
+    <button id="account-bar-toggle" class="account-bar-toggle" onclick="Account.toggleBar()" title="Your ZipBeam Account">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+      <span id="account-bar-name"></span>
+      <svg id="account-bar-chevron" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+    </button>
+
+    <!-- Expandable panel -->
+    <section id="account-panel" class="card account-panel account-panel-collapsed">
+      <div class="account-panel-inner">
+        <div class="account-panel-left">
+          <p class="account-panel-label">Your ZipBeam ID</p>
+          <div class="my-uid-row">
+            <code id="my-uid" class="my-uid"></code>
+            <button class="copy-btn" onclick="Account.copyMyUid()" title="Copy ID">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            </button>
+          </div>
+          <div class="account-panel-actions">
+            <button class="btn-qr-download" onclick="Account.downloadMyQr()">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Download Your QR Code
+            </button>
+            <a id="my-uid-whatsapp" class="btn-ghost" style="font-size:13px" target="_blank" rel="noopener">📤 Share via WhatsApp</a>
+          </div>
+        </div>
+        <div class="account-panel-right">
+          <p class="account-panel-label">Send files to someone</p>
+          <div class="send-to-uid-row">
+            <input id="send-to-uid-input" class="auth-input" placeholder="Enter a ZipBeam ID" style="flex:1" />
+            <button class="btn-ghost" onclick="Account.sendToUid()">Send Files</button>
+          </div>
+          <p id="send-to-uid-error" class="auth-error"></p>
+          <div id="recent-contacts-wrap" style="display:none">
+            <p class="recent-contacts-label">Recent</p>
+            <div id="recent-contacts-list" class="recent-contacts-list"></div>
+          </div>
+        </div>
+      </div>
+    </section>
     <div id="my-uid-qr-offscreen" style="position:absolute;left:-9999px;top:-9999px"></div>
-    <p class="my-uid-hint">Tip: a print shop can put a fixed QR code of <code>zipbeam.in/u/&lt;their ID&gt;</code> at their counter — every customer who scans it can send files straight to them, no re-printing needed.</p>
-
-    <div class="send-to-uid-row">
-      <input id="send-to-uid-input" class="auth-input" placeholder="Enter a ZipBeam ID to send files" style="flex:1" />
-      <button class="btn-ghost" onclick="Account.sendToUid()">Send Files</button>
-    </div>
-    <p id="send-to-uid-error" class="auth-error"></p>
-
-    <div id="recent-contacts-wrap" style="display:none">
-      <p class="recent-contacts-label">Recent</p>
-      <div id="recent-contacts-list" class="recent-contacts-list"></div>
-    </div>
-  </section>
+  </div>
 
   <!-- MAIN GRID -->
   <main class="main-grid">
