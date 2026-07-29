@@ -326,15 +326,17 @@
     <div id="my-uid-qr-offscreen" style="position:absolute;left:-9999px;top:-9999px"></div>
   </div>
 
-  <!-- SIDE AD RAILS — visible only on wide screens; swap placeholders for real AdSense units -->
+  <!-- SIDE AD RAILS — visible only on wide screens -->
+  <!-- Ad slot #2 (left rail 160x600) — paste AdSense unit "zipbeam-rail-left" here -->
   <aside class="ad-rail ad-rail-left" aria-label="Advertisement">
-    <div class="ad-rail-box">
+    <div class="ad-rail-box" id="ad-rail-left">
       <span class="ad-banner-label">Advertisement</span>
       <span class="ad-rail-text">Your ad here<br>160 × 600</span>
     </div>
   </aside>
+  <!-- Ad slot #3 (right rail 160x600) — paste AdSense unit "zipbeam-rail-right" here -->
   <aside class="ad-rail ad-rail-right" aria-label="Advertisement">
-    <div class="ad-rail-box">
+    <div class="ad-rail-box" id="ad-rail-right">
       <span class="ad-banner-label">Advertisement</span>
       <span class="ad-rail-text">Your ad here<br>160 × 600</span>
     </div>
@@ -368,8 +370,8 @@
         Expires in <strong id="timer-display">30:00</strong>
       </div>
 
-      <!-- Ad slot — replace with real ad unit once AdSense is approved -->
-      <div class="ad-banner">
+      <!-- Ad slot #1 (desktop inline) — paste AdSense unit "zipbeam-inline" here -->
+      <div class="ad-banner" id="ad-desktop-inline">
         <span class="ad-banner-label">Advertisement</span>
         <span>Your ad could be here — ZipBeam is free, ads keep it that way</span>
       </div>
@@ -391,12 +393,6 @@
         </div>
         <p>Waiting for files…</p>
         <div class="waiting-dots"><span></span><span></span><span></span></div>
-
-        <!-- Ad slot — replace with real ad unit once AdSense is approved -->
-        <div class="ad-banner" style="margin-top:24px;width:100%">
-          <span class="ad-banner-label">Advertisement</span>
-          <span>Your ad could be here — ZipBeam is free, ads keep it that way</span>
-        </div>
       </div>
 
       <!-- File list -->
@@ -561,8 +557,8 @@
         <button class="btn-ghost" onclick="Auth.showOverlay('signup')">✨ Create Free Account</button>
       </div>
 
-      <!-- Ad slot — replace with real ad unit once AdSense is approved -->
-      <div class="ad-banner" style="margin-top:16px;width:100%">
+      <!-- Mobile ad (choice screen) — paste AdSense unit "zipbeam-mobile" here; only one screen shows at a time -->
+      <div class="ad-banner ad-mobile" style="margin-top:16px;width:100%">
         <span class="ad-banner-label">Advertisement</span>
         <span>Your ad could be here — ZipBeam is free, ads keep it that way</span>
       </div>
@@ -614,8 +610,8 @@
         Send Files
       </button>
 
-      <!-- Ad slot — replace with real ad unit once AdSense is approved -->
-      <div class="ad-banner" style="margin-top:16px;width:100%">
+      <!-- Mobile ad (upload screen) — paste AdSense unit "zipbeam-mobile" here; only one screen shows at a time -->
+      <div class="ad-banner ad-mobile" style="margin-top:16px;width:100%">
         <span class="ad-banner-label">Advertisement</span>
         <span>Your ad could be here — ZipBeam is free, ads keep it that way</span>
       </div>
@@ -637,8 +633,8 @@
         <button class="btn-ghost" onclick="Auth.showOverlay('signup')">✨ Create Free Account</button>
       </div>
 
-      <!-- Ad slot — replace with real ad unit once AdSense is approved -->
-      <div class="ad-banner" style="margin-top:16px;width:100%">
+      <!-- Mobile ad (success screen) — paste AdSense unit "zipbeam-mobile" here; only one screen shows at a time -->
+      <div class="ad-banner ad-mobile" style="margin-top:16px;width:100%">
         <span class="ad-banner-label">Advertisement</span>
         <span>Your ad could be here — ZipBeam is free, ads keep it that way</span>
       </div>
