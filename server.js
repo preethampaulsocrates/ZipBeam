@@ -686,6 +686,22 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ── API: Delete a file (used after printing — print-only files are not kept) ──
+  const delMatch = pathname.match(/^\/api\/files\/([a-f0-9]+)$/i);
+  if (method === 'DELETE' && delMatch) {
+    const fileId = delMatch[1];
+    const info   = fileStore.get(fileId);
+    if (!info) return json(res, 404, { error: 'File not found' });
+    const sid = info.sessionId;
+    deleteFile(fileId);
+    sseEmit(sid, 'file:deleted', { fileId });
+    const sess = sessions.get(sid);
+    if (sess && sess.kind === 'delivery' && sess.toUserId) {
+      sseEmitUser(sess.toUserId, 'file:deleted', { fileId });
+    }
+    return json(res, 200, { ok: true });
+  }
+
   // ── API: SSE — desktop event stream ──
   const sseMatch = pathname.match(/^\/api\/sessions\/([A-Z0-9-]+)\/events$/i);
   if (method === 'GET' && sseMatch) {

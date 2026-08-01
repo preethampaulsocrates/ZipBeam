@@ -294,60 +294,118 @@ const Desktop = (() => {
     }
   }
 
+  function setPrintReady(ready) {
+    const btn     = document.getElementById('print-now-btn');
+    const label   = document.getElementById('print-now-label');
+    const loading = document.getElementById('print-loading');
+    const frame   = document.getElementById('print-frame');
+    if (btn)     btn.disabled = !ready;
+    if (label)   label.textContent = ready ? 'Print' : 'Preparing…';
+    if (loading) loading.style.display = ready ? 'none' : 'flex';
+    if (frame)   frame.style.visibility = ready ? 'visible' : 'hidden';
+  }
+
   async function printFile(fileId, filename) {
+    const modal  = document.getElementById('print-modal');
+    const frame  = document.getElementById('print-frame');
+    const nameEl = document.getElementById('print-modal-filename');
+
+    // Show the modal in its loading state straight away
+    if (nameEl) nameEl.textContent = filename;
+    frame._loaded = false;
+    setPrintReady(false);
+    modal.style.display = 'flex';
+
     try {
       const res = await fetch(`/api/files/${fileId}/download`);
       if (!res.ok) throw new Error('File not available');
       const blob = await res.blob();
       const blobUrl = URL.createObjectURL(blob);
 
-      const modal = document.getElementById('print-modal');
-      const frame = document.getElementById('print-frame');
-      const nameEl = document.getElementById('print-modal-filename');
+      // Only enable Print once the preview has actually rendered — printing an
+      // unloaded frame is what produced blank previews on slower machines.
+      frame.onload = () => {
+        frame._loaded = true;
+        setPrintReady(true);
+      };
+      // PDFs render in the browser's built-in viewer, which does not always fire
+      // load reliably — fall back to enabling Print after a short grace period.
+      clearTimeout(frame._readyTimer);
+      frame._readyTimer = setTimeout(() => {
+        if (!frame._loaded) { frame._loaded = true; setPrintReady(true); }
+      }, 2500);
 
       // For images, wrap in a minimal HTML page so we control the print layout
       if (blob.type.startsWith('image/')) {
         const html = `<!DOCTYPE html><html><head><style>*{margin:0;padding:0;box-sizing:border-box;}body{display:flex;justify-content:center;align-items:center;min-height:100vh;background:#fff;}img{max-width:100%;max-height:100vh;object-fit:contain;}</style></head><body><img src="${blobUrl}"></body></html>`;
         const htmlBlob = new Blob([html], { type: 'text/html' });
-        frame.src = URL.createObjectURL(htmlBlob);
+        frame._htmlUrl = URL.createObjectURL(htmlBlob);
+        frame.src = frame._htmlUrl;
       } else {
         frame.src = blobUrl;
       }
 
       frame._blobUrl = blobUrl;
       frame._fileId  = fileId;
-      if (nameEl) nameEl.textContent = filename;
-      modal.style.display = 'flex';
     } catch {
+      closePrintModal();
       Toast.error('Could not load file for printing.');
     }
   }
 
   function triggerFramePrint() {
-    const frame = document.getElementById('print-frame');
+    const frame  = document.getElementById('print-frame');
+    const fileId = frame._fileId;
+    if (!frame._loaded) { Toast.info('Preview is still loading — one moment.'); return; }
+
+    let settled = false;
+    function finish() {
+      if (settled) return;
+      settled = true;
+      window.removeEventListener('afterprint', finish);
+      window.removeEventListener('focus', onWindowFocus);
+      try { frame.contentWindow.removeEventListener('afterprint', finish); } catch {}
+      // Print-only files are never kept — drop it from the list and the server
+      if (fileId) discardFile(fileId);
+      closePrintModal();
+    }
+    function onWindowFocus() { setTimeout(finish, 250); }
+
+    // afterprint is the ideal signal but does not fire in every browser for
+    // PDF iframes, so also settle when focus returns from the print dialog.
+    window.addEventListener('afterprint', finish);
+    try { frame.contentWindow.addEventListener('afterprint', finish); } catch {}
+
     try {
       frame.contentWindow.focus();
-      // Wait for the print dialog to close before marking done and cleaning up
-      frame.contentWindow.addEventListener('afterprint', function onAfterPrint() {
-        frame.contentWindow.removeEventListener('afterprint', onAfterPrint);
-        const fileId = frame._fileId;
-        if (fileId && files[fileId]) files[fileId].downloaded = true;
-        renderFiles();
-        closePrintModal();
-      }, { once: true });
       frame.contentWindow.print();
     } catch {
+      settled = true;
+      window.removeEventListener('afterprint', finish);
       Toast.error('Print failed — browser blocked it.');
+      return;
     }
+    setTimeout(() => window.addEventListener('focus', onWindowFocus), 400);
+  }
+
+  async function discardFile(fileId) {
+    delete files[fileId];
+    renderFiles();
+    try { await fetch(`/api/files/${fileId}`, { method: 'DELETE' }); } catch {}
   }
 
   function closePrintModal() {
     const modal = document.getElementById('print-modal');
     const frame = document.getElementById('print-frame');
     modal.style.display = 'none';
+    clearTimeout(frame._readyTimer);
+    frame.onload = null;
     if (frame._blobUrl) { URL.revokeObjectURL(frame._blobUrl); frame._blobUrl = null; }
+    if (frame._htmlUrl) { URL.revokeObjectURL(frame._htmlUrl); frame._htmlUrl = null; }
     frame.src = '';
     frame._fileId = null;
+    frame._loaded = false;
+    setPrintReady(false);
   }
 
   async function newSession() {
