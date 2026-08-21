@@ -307,8 +307,13 @@
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               Download Your QR Code
             </button>
+            <button class="btn-qr-download btn-qr-atp" onclick="Account.downloadKioskQr()" title="For shops charging for prints">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+              Download Paid Print (ATP) Poster
+            </button>
             <a id="my-uid-whatsapp" class="btn-ghost" style="font-size:13px" target="_blank" rel="noopener">📤 Share via WhatsApp</a>
           </div>
+          <p class="account-panel-note">The <strong>ATP poster</strong> charges customers automatically — they scan, pay, and the print releases itself. Your plain QR code stays free for people sending you files.</p>
         </div>
         <div class="account-panel-right">
           <p class="account-panel-label">Send files to someone</p>
@@ -508,7 +513,10 @@
   <nav class="mobile-nav">
     <div class="logo">
       <svg width="28" height="28" viewBox="0 0 34 34" fill="none"><rect width="34" height="34" rx="9" fill="url(#ml-grad)"/><path d="M19 6L10 18h7.5L14 28 27 14h-7.5L19 6z" fill="white"/><defs><linearGradient id="ml-grad" x1="0" y1="0" x2="34" y2="34"><stop stop-color="#22D3EE"/><stop offset="1" stop-color="#A855F7"/></linearGradient></defs></svg>
-      <span class="logo-text">ZipBeam</span>
+      <div class="mobile-brand">
+        <span class="logo-text" id="mobile-brand-name">ZipBeam</span>
+        <span class="mobile-brand-sub" id="mobile-brand-sub" style="display:none">powered by ZipBeam</span>
+      </div>
     </div>
     <button class="btn-ghost lang-btn" onclick="LangPanel.open()" title="Translate">
       🌐 Language

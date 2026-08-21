@@ -2094,6 +2094,27 @@ body::before {
   border-color: rgba(79,70,229,0.35);
 }
 
+/* ── Mobile brand lockup (ATP at a kiosk, ZipBeam otherwise) ── */
+.mobile-brand { display: flex; flex-direction: column; line-height: 1.15; }
+.mobile-brand-sub {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--gray-400);
+  letter-spacing: 0.02em;
+}
+
+/* ── Account panel: ATP poster button + note ── */
+.btn-qr-atp {
+  background: linear-gradient(135deg, #4F46E5, #A855F7);
+}
+.account-panel-note {
+  margin-top: 10px;
+  font-size: 12.5px;
+  color: var(--gray-500);
+  line-height: 1.6;
+}
+.account-panel-note strong { color: var(--indigo); }
+
 /* ── Kiosk: paid print order card ── */
 .kiosk-card {
   width: 100%;

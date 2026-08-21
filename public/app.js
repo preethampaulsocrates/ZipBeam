@@ -482,6 +482,11 @@ const Mobile = (() => {
               purpose = 'print';
               const shopEl = document.getElementById('kiosk-shop-name');
               if (shopEl) shopEl.textContent = kioskInfo.shopName;
+              // The kiosk is its own brand at the counter; ZipBeam sits underneath.
+              const brandEl = document.getElementById('mobile-brand-name');
+              const subEl   = document.getElementById('mobile-brand-sub');
+              if (brandEl) brandEl.textContent = 'ATP';
+              if (subEl)   subEl.style.display = 'block';
               applyPurposeUI();
               showState('mobile-upload');
               return;
@@ -1000,17 +1005,39 @@ const Account = (() => {
     ctx.closePath();
   }
 
-  function downloadMyQr() {
-    if (!user) return;
+  // Renders a QR offscreen, then hands the ready image/canvas to draw().
+  function withQrImage(url, size, draw) {
     const wrap = document.getElementById('my-uid-qr-offscreen');
     if (!wrap || typeof QRCode === 'undefined') { Toast.error('QR generator not available'); return; }
     wrap.innerHTML = '';
-    const url = `${location.origin}/u/${user.id}`;
     new QRCode(wrap, {
-      text: url, width: 500, height: 500,
+      text: url, width: size, height: size,
       colorDark: '#0F172A', colorLight: '#FFFFFF',
       correctLevel: QRCode.CorrectLevel.H
     });
+    // QRCode.js renders asynchronously into a canvas (or an img fallback).
+    setTimeout(() => {
+      const qrCanvas = wrap.querySelector('canvas');
+      const qrImg    = wrap.querySelector('img');
+      if (qrCanvas) draw(qrCanvas);
+      else if (qrImg) { if (qrImg.complete) draw(qrImg); else qrImg.onload = () => draw(qrImg); }
+      else Toast.error('Could not generate QR code');
+    }, 300);
+  }
+
+  function savePosterPng(canvas, filename, message) {
+    const a = document.createElement('a');
+    a.href = canvas.toDataURL('image/png');
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    Toast.success(message);
+  }
+
+  function downloadMyQr() {
+    if (!user) return;
+    withQrImage(`${location.origin}/u/${user.id}`, 500, drawPoster);
 
     function drawPoster(qrSource) {
       const W = 700, H = 1020;
@@ -1109,31 +1136,112 @@ const Account = (() => {
       ctx.font = '13px sans-serif';
       ctx.fillText('zipbeam.in', W / 2, H - 18);
 
-      const dataUrl = c.toDataURL('image/png');
-      const a = document.createElement('a');
-      a.href = dataUrl;
-      a.download = `zipbeam-qr-${user.id}.png`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      Toast.success('QR poster downloaded — print it and display it anywhere');
+      savePosterPng(c, `zipbeam-qr-${user.id}.png`, 'QR poster downloaded — print it and display it anywhere');
     }
+  }
 
-    setTimeout(() => {
-      const qrCanvas = wrap.querySelector('canvas');
-      const qrImg   = wrap.querySelector('img');
-      if (qrCanvas) {
-        drawPoster(qrCanvas);
-      } else if (qrImg) {
-        if (qrImg.complete) {
-          drawPoster(qrImg);
-        } else {
-          qrImg.onload = () => drawPoster(qrImg);
-        }
-      } else {
-        Toast.error('Could not generate QR code');
-      }
-    }, 300);
+  // ATP (Any Time Print) counter poster — points at the *paid* kiosk flow.
+  function downloadKioskQr() {
+    if (!user) return;
+    withQrImage(`${location.origin}/k/${user.id}`, 460, drawAtpPoster);
+
+    function drawAtpPoster(qrSource) {
+      const W = 700, H = 1080;
+      const c = document.createElement('canvas');
+      c.width = W; c.height = H;
+      const ctx = c.getContext('2d');
+
+      // Deep gradient background
+      const bg = ctx.createLinearGradient(0, 0, W, H);
+      bg.addColorStop(0, '#4F46E5');
+      bg.addColorStop(0.55, '#7C3AED');
+      bg.addColorStop(1, '#A855F7');
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, W, H);
+
+      ctx.textAlign = 'center';
+
+      // ATP wordmark
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 78px sans-serif';
+      ctx.fillText('ATP', W / 2, 92);
+
+      // Expansion — always visible so the name explains itself
+      ctx.font = 'bold 21px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.95)';
+      ctx.fillText('A N Y   T I M E   P R I N T', W / 2, 128);
+
+      ctx.font = '16px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      ctx.fillText('Print from your phone — no app, no USB, no waiting', W / 2, 162);
+
+      // White card
+      const cardX = 36, cardY = 190, cardW = W - 72, cardH = 830;
+      ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,0.22)';
+      ctx.shadowBlur = 34;
+      ctx.shadowOffsetY = 8;
+      ctx.beginPath();
+      roundRect(ctx, cardX, cardY, cardW, cardH, 28);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fill();
+      ctx.restore();
+
+      // Heading
+      ctx.fillStyle = '#4F46E5';
+      ctx.font = 'bold 30px sans-serif';
+      ctx.fillText('SCAN TO PRINT', W / 2, cardY + 54);
+
+      // QR
+      const qrSize = 380, qrX = (W - qrSize) / 2, qrY = cardY + 78;
+      ctx.drawImage(qrSource, qrX, qrY, qrSize, qrSize);
+
+      // Steps
+      const stepY = qrY + qrSize + 52;
+      const steps = ['Scan', 'Choose', 'Pay', 'Collect'];
+      const stepW = cardW / steps.length;
+      steps.forEach((s, i) => {
+        const cx = cardX + stepW * i + stepW / 2;
+        ctx.beginPath();
+        ctx.arc(cx, stepY, 18, 0, Math.PI * 2);
+        ctx.fillStyle = '#4F46E5';
+        ctx.fill();
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = 'bold 16px sans-serif';
+        ctx.fillText(String(i + 1), cx, stepY + 6);
+        ctx.fillStyle = '#334155';
+        ctx.font = 'bold 14px sans-serif';
+        ctx.fillText(s, cx, stepY + 44);
+      });
+
+      // Divider
+      const divY = stepY + 74;
+      ctx.strokeStyle = '#E2E8F0'; ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(cardX + 40, divY); ctx.lineTo(cardX + cardW - 40, divY);
+      ctx.stroke();
+
+      // Shop name
+      ctx.fillStyle = '#94A3B8';
+      ctx.font = '14px sans-serif';
+      ctx.fillText('Printing at', W / 2, divY + 32);
+      ctx.fillStyle = '#0F172A';
+      ctx.font = 'bold 26px sans-serif';
+      ctx.fillText(user.name || 'Print Shop', W / 2, divY + 64);
+
+      // Deliberately no prices printed — rates are shown in the app before
+      // paying, so the shop never has to reprint this poster to change them.
+      ctx.fillStyle = '#64748B';
+      ctx.font = 'italic 14px sans-serif';
+      ctx.fillText('Price is shown on your phone before you pay.', W / 2, divY + 94);
+
+      // Footer
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      ctx.font = '14px sans-serif';
+      ctx.fillText('powered by ZipBeam  ·  zipbeam.in', W / 2, H - 26);
+
+      savePosterPng(c, `atp-kiosk-qr-${user.id}.png`, 'ATP poster downloaded — print it and display it at your counter');
+    }
   }
 
   async function loadRecentContacts() {
@@ -1190,7 +1298,7 @@ const Account = (() => {
     });
   }
 
-  return { init, toggleBar, copyMyUid, downloadMyQr, sendToUid };
+  return { init, toggleBar, copyMyUid, downloadMyQr, downloadKioskQr, sendToUid };
 })();
 
 // ─── Router (runs last, after modules defined) ────────────────────────────────
