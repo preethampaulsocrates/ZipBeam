@@ -37,6 +37,15 @@ function razorpayConfigured() {
   return !!(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET);
 }
 
+// 'razorpay' = real money. 'mock' = simulated, for testing the flow without a
+// gateway account. 'none' = not set up. Mock must be opted into explicitly via
+// PAYMENTS_MODE=mock — it is never the default and never a fallback, so a
+// misconfigured gateway fails closed rather than silently giving away prints.
+function paymentsMode() {
+  if (process.env.PAYMENTS_MODE === 'mock') return 'mock';
+  return razorpayConfigured() ? 'razorpay' : 'none';
+}
+
 function razorpayPost(apiPath, payload) {
   return new Promise((resolve, reject) => {
     if (!razorpayConfigured()) return reject(new Error('Razorpay is not configured'));
@@ -176,6 +185,7 @@ function publicJob(j) {
     totalPages: j.totalPages, copies: j.copies, colorMode: j.colorMode,
     unitPaise: j.unitPaise, amountPaise: j.amountPaise,
     pagesUncertain: j.pagesUncertain,
+    mock: !!j.mock,
     createdAt: j.createdAt, paidAt: j.paidAt, printedAt: j.printedAt,
   };
 }
@@ -717,7 +727,8 @@ const server = http.createServer(async (req, res) => {
       payload.kiosk = {
         shopName:     shop ? shop.name : 'Print Shop',
         pricing:      shopPricing(shop),
-        paymentReady: razorpayConfigured(),
+        paymentReady: paymentsMode() !== 'none',
+        paymentMode:  paymentsMode(),
       };
     }
     return json(res, 200, payload);
@@ -911,7 +922,22 @@ const server = http.createServer(async (req, res) => {
     const job = printJobs.get(orderMatch[1]);
     if (!job) return json(res, 404, { error: 'Print job not found' });
     if (job.status === 'paid' || job.status === 'printed') return json(res, 409, { error: 'This job is already paid' });
-    if (!razorpayConfigured()) return json(res, 501, { error: 'Payments are not set up yet' });
+
+    const mode = paymentsMode();
+    if (mode === 'none') return json(res, 501, { error: 'Payments are not set up yet' });
+
+    if (mode === 'mock') {
+      job.razorpayOrderId = 'mock_order_' + crypto.randomBytes(6).toString('hex');
+      job.status = 'awaiting_payment';
+      job.mock = true; // permanently marks this job as never having taken real money
+      await savePrintJob(job);
+      console.warn(`  ⚠️  MOCK PAYMENT — order opened for ${job.id} (${job.amountPaise} paise). No real money.`);
+      return json(res, 200, {
+        mock: true, orderId: job.razorpayOrderId,
+        amount: job.amountPaise, currency: 'INR', job: publicJob(job),
+      });
+    }
+
     try {
       const order = await razorpayPost('/v1/orders', {
         amount: job.amountPaise, currency: 'INR', receipt: job.id,
@@ -936,10 +962,29 @@ const server = http.createServer(async (req, res) => {
     if (!job) return json(res, 404, { error: 'Print job not found' });
     let body; try { body = JSON.parse((await readBody(req)).toString()); } catch { return json(res, 400, { error: 'Invalid JSON' }); }
 
+    const mode = paymentsMode();
+
+    // Mock settlement — only ever reachable when PAYMENTS_MODE=mock AND the job
+    // itself was opened in mock mode, so a real job can never be settled this way.
+    if (mode === 'mock') {
+      if (!job.mock) return json(res, 400, { error: 'This job was not created in mock mode' });
+      if (job.status !== 'paid' && job.status !== 'printed') {
+        job.status = 'paid';
+        job.razorpayPaymentId = 'mock_pay_' + crypto.randomBytes(6).toString('hex');
+        job.paidAt = Date.now();
+        await savePrintJob(job);
+        console.warn(`  ⚠️  MOCK PAYMENT — ${job.id} marked PAID without real money.`);
+        sseEmitUser(job.shopUserId, 'print:paid', { job: publicJob(job) });
+        sseEmit(job.sessionId, 'print:paid', { job: publicJob(job) });
+      }
+      return json(res, 200, { ok: true, mock: true, job: publicJob(job) });
+    }
+
     const orderId   = body.razorpay_order_id;
     const paymentId = body.razorpay_payment_id;
     const signature = body.razorpay_signature;
     if (!orderId || orderId !== job.razorpayOrderId) return json(res, 400, { error: 'Order mismatch' });
+    if (job.mock) return json(res, 400, { error: 'Mock job cannot be settled with a real payment' });
     if (!verifyRazorpaySignature(orderId, paymentId, signature)) {
       return json(res, 400, { error: 'Payment verification failed' });
     }
@@ -1023,6 +1068,18 @@ server.listen(PORT, () => {
   console.log('  ⚡ ZipBeam is running!');
   console.log(`  🌐 Open: http://localhost:${PORT}`);
   console.log(`  📱 Mobile test: http://localhost:${PORT}/s/zip-test`);
+  const mode = paymentsMode();
+  if (mode === 'mock') {
+    console.log('\n  ═══════════════════════════════════════════════════');
+    console.log('  ⚠️   PAYMENTS ARE IN MOCK MODE');
+    console.log('  ⚠️   Print jobs settle WITHOUT taking real money.');
+    console.log('  ⚠️   Unset PAYMENTS_MODE before going live.');
+    console.log('  ═══════════════════════════════════════════════════');
+  } else if (mode === 'razorpay') {
+    console.log('  💳 Payments: Razorpay (live keys configured)');
+  } else {
+    console.log('  💳 Payments: not configured — kiosk will ask customers to pay at the counter');
+  }
   console.log('\n  Press Ctrl+C to stop\n');
 });
 

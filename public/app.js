@@ -724,6 +724,9 @@ const Mobile = (() => {
     if (bwBtn) bwBtn.classList.toggle('active', colorMode === 'bw');
     if (clBtn) clBtn.classList.toggle('active', colorMode === 'color');
 
+    const mockBanner = document.getElementById('kiosk-mock-banner');
+    if (mockBanner) mockBanner.style.display = kioskInfo.paymentMode === 'mock' ? 'block' : 'none';
+
     const warn = document.getElementById('kiosk-warning');
     if (warn) {
       const msgs = [];
@@ -767,6 +770,24 @@ const Mobile = (() => {
       const or = await fetch(`/api/print-jobs/${currentJob.id}/order`, { method: 'POST' });
       const od = await or.json();
       if (!or.ok) throw new Error(od.error || 'Could not start payment');
+
+      // Mock mode — settle directly, no gateway involved. The server only
+      // honours this when it is itself running with PAYMENTS_MODE=mock.
+      if (od.mock) {
+        if (!confirm(`TEST MODE — no real payment.\n\nSimulate paying ${rupees(od.amount)} and send this job to print?`)) {
+          resetPayButton();
+          return;
+        }
+        if (label) label.textContent = 'Confirming…';
+        const vr = await fetch(`/api/print-jobs/${currentJob.id}/verify`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+        });
+        const vd = await vr.json();
+        if (!vr.ok) throw new Error(vd.error || 'Could not complete the test payment');
+        onPaid(vd.job);
+        return;
+      }
+
       if (typeof Razorpay === 'undefined') throw new Error('Payment library did not load — check your connection');
 
       const rzp = new Razorpay({

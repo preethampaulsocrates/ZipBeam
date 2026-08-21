@@ -2115,6 +2115,21 @@ body::before {
 }
 .account-panel-note strong { color: var(--indigo); }
 
+/* ── Kiosk: mock-payment warning banner ── */
+.kiosk-mock-banner {
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 10px 14px;
+  background: rgba(239,68,68,0.10);
+  border: 1px solid rgba(239,68,68,0.35);
+  border-radius: 10px;
+  color: #B91C1C;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: 0.01em;
+}
+
 /* ── Kiosk: paid print order card ── */
 .kiosk-card {
   width: 100%;
