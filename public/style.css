@@ -2094,6 +2094,80 @@ body::before {
   border-color: rgba(79,70,229,0.35);
 }
 
+/* ── Kiosk: paid print order card ── */
+.kiosk-card {
+  width: 100%;
+  margin-top: 4px;
+  padding: 16px;
+  background: var(--glass);
+  backdrop-filter: blur(14px) saturate(150%);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  text-align: left;
+}
+.kiosk-file-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.kiosk-file {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  font-size: 13.5px;
+}
+.kiosk-file-name {
+  color: var(--text); font-weight: 500;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.kiosk-file-pages { color: var(--gray-400); font-size: 12.5px; flex-shrink: 0; }
+
+.kiosk-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 0; border-top: 1px solid var(--gray-200);
+}
+.kiosk-row-label { font-size: 13.5px; font-weight: 600; color: var(--gray-600); }
+
+.kiosk-toggle {
+  display: flex; gap: 4px; padding: 3px;
+  background: var(--gray-100); border-radius: 999px;
+}
+.kiosk-toggle-btn {
+  border: none; background: transparent; cursor: pointer;
+  font-family: inherit; font-size: 13px; font-weight: 600;
+  color: var(--gray-500); padding: 6px 16px; border-radius: 999px;
+  transition: background 0.15s, color 0.15s;
+}
+.kiosk-toggle-btn.active { background: #fff; color: var(--indigo); box-shadow: var(--shadow-xs); }
+
+.kiosk-stepper { display: flex; align-items: center; gap: 4px; }
+.kiosk-stepper button {
+  width: 32px; height: 32px; border-radius: 50%;
+  border: 1px solid var(--gray-200); background: var(--card);
+  color: var(--indigo); font-size: 18px; font-weight: 700;
+  cursor: pointer; font-family: inherit; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  transition: border-color 0.15s, background 0.15s;
+}
+.kiosk-stepper button:hover { border-color: var(--indigo); background: rgba(79,70,229,0.05); }
+.kiosk-stepper span {
+  min-width: 34px; text-align: center;
+  font-size: 16px; font-weight: 700; color: var(--text);
+}
+
+.kiosk-total {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  padding-top: 12px; border-top: 1px solid var(--gray-200);
+}
+.kiosk-breakdown { font-size: 12.5px; color: var(--gray-400); }
+.kiosk-amount {
+  font-family: var(--font-head); font-size: 24px; font-weight: 800;
+  background: var(--grad); -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.kiosk-warning {
+  margin-top: 12px; padding: 10px 12px;
+  background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.25);
+  border-radius: 10px; font-size: 12.5px; color: #92400E; line-height: 1.55;
+}
+#kiosk-pay-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
 /* ── Mobile: optional account invite card ── */
 .mobile-account-invite {
   width: 100%;

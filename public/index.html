@@ -130,6 +130,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap" rel="stylesheet" />
   <script src="/qrcode.min.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="https://checkout.razorpay.com/v1/checkout.js" async defer></script>
   <link rel="stylesheet" href="/style.css" />
   <script>
     function googleTranslateElementInit() {
@@ -621,13 +622,63 @@
       </div>
     </div>
 
+    <!-- KIOSK PAYMENT STATE -->
+    <div id="mobile-pay" class="mobile-state" style="display:none">
+      <div class="mobile-session-pill">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        <strong id="kiosk-shop-name">Print Shop</strong>
+      </div>
+
+      <button class="back-btn" onclick="Mobile.backToUpload()">← Back</button>
+      <h2 class="mobile-title">Confirm &amp; Pay</h2>
+      <p class="mobile-sub">Check your order, then pay to start printing</p>
+
+      <div class="kiosk-card">
+        <div id="kiosk-file-list" class="kiosk-file-list"></div>
+
+        <div class="kiosk-row">
+          <span class="kiosk-row-label">Print type</span>
+          <div class="kiosk-toggle">
+            <button id="kiosk-bw" class="kiosk-toggle-btn active" onclick="Mobile.setColorMode('bw')">B&amp;W</button>
+            <button id="kiosk-color" class="kiosk-toggle-btn" onclick="Mobile.setColorMode('color')">Colour</button>
+          </div>
+        </div>
+
+        <div class="kiosk-row">
+          <span class="kiosk-row-label">Copies</span>
+          <div class="kiosk-stepper">
+            <button onclick="Mobile.changeCopies(-1)" aria-label="Fewer copies">−</button>
+            <span id="kiosk-copies">1</span>
+            <button onclick="Mobile.changeCopies(1)" aria-label="More copies">+</button>
+          </div>
+        </div>
+
+        <div class="kiosk-total">
+          <span id="kiosk-breakdown" class="kiosk-breakdown"></span>
+          <span id="kiosk-amount" class="kiosk-amount">₹0</span>
+        </div>
+        <p id="kiosk-warning" class="kiosk-warning" style="display:none"></p>
+      </div>
+
+      <button class="btn-send" id="kiosk-pay-btn" onclick="Mobile.payAndPrint()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+        <span id="kiosk-pay-label">Pay &amp; Print</span>
+      </button>
+
+      <!-- Mobile ad — paste AdSense unit "zipbeam-mobile" here -->
+      <div class="ad-banner ad-mobile" style="margin-top:16px;width:100%">
+        <span class="ad-banner-label">Advertisement</span>
+        <span>Your ad could be here — ZipBeam is free, ads keep it that way</span>
+      </div>
+    </div>
+
     <!-- SUCCESS STATE -->
     <div id="mobile-success" class="mobile-state" style="display:none">
       <div class="state-icon success-icon">
         <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
       </div>
-      <h2>Files Sent! 🎉</h2>
-      <p>Your files have been transferred. Check your computer to download them.</p>
+      <h2 id="success-title">Files Sent! 🎉</h2>
+      <p id="success-text">Your files have been transferred. Check your computer to download them.</p>
       <div class="sent-summary" id="sent-summary"></div>
       <button class="btn-secondary" onclick="Mobile.reset()">Send More Files</button>
 

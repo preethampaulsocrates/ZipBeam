@@ -32,6 +32,74 @@ function verifyGoogleIdToken(idToken) {
 
 const { Pool } = require('pg');
 
+// ─── Razorpay (no SDK — plain HTTPS + HMAC) ──────────────────────────────────
+function razorpayConfigured() {
+  return !!(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET);
+}
+
+function razorpayPost(apiPath, payload) {
+  return new Promise((resolve, reject) => {
+    if (!razorpayConfigured()) return reject(new Error('Razorpay is not configured'));
+    const body = JSON.stringify(payload);
+    const auth = Buffer.from(`${process.env.RAZORPAY_KEY_ID}:${process.env.RAZORPAY_KEY_SECRET}`).toString('base64');
+    const r = https.request({
+      hostname: 'api.razorpay.com',
+      path: apiPath,
+      method: 'POST',
+      headers: {
+        'Content-Type':   'application/json',
+        'Content-Length': Buffer.byteLength(body),
+        'Authorization':  `Basic ${auth}`,
+      },
+    }, (resp) => {
+      let data = '';
+      resp.on('data', c => data += c);
+      resp.on('end', () => {
+        let parsed;
+        try { parsed = JSON.parse(data); } catch { return reject(new Error('Invalid Razorpay response')); }
+        if (resp.statusCode >= 200 && resp.statusCode < 300) return resolve(parsed);
+        reject(new Error((parsed.error && parsed.error.description) || 'Razorpay request failed'));
+      });
+    });
+    r.on('error', reject);
+    r.write(body);
+    r.end();
+  });
+}
+
+// Razorpay signs `${order_id}|${payment_id}` with the key secret.
+function verifyRazorpaySignature(orderId, paymentId, signature) {
+  if (!process.env.RAZORPAY_KEY_SECRET || !signature) return false;
+  const expected = crypto
+    .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+    .update(`${orderId}|${paymentId}`)
+    .digest('hex');
+  try {
+    return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(String(signature)));
+  } catch { return false; }
+}
+
+// ─── Page counting (needed to price a print job) ──────────────────────────────
+// Returns a page count, or null when it cannot be determined reliably.
+function countPdfPages(buf) {
+  const s = buf.toString('latin1');
+  // Normal PDFs expose one `/Type /Page` object per page.
+  const pageObjs = s.match(/\/Type\s*\/Page(?![sA-Za-z])/g);
+  if (pageObjs && pageObjs.length) return pageObjs.length;
+  // Linearised / object-stream PDFs may only expose the page-tree /Count.
+  let max = 0, m;
+  const re = /\/Count\s+(\d+)/g;
+  while ((m = re.exec(s))) max = Math.max(max, parseInt(m[1], 10));
+  return max > 0 ? max : null;
+}
+
+function detectPageCount(buf, mimetype, filename) {
+  const ext = path.extname(filename || '').toLowerCase();
+  if (ext === '.pdf' || mimetype === 'application/pdf') return countPdfPages(buf);
+  if ((mimetype || '').startsWith('image/')) return 1;
+  return null; // unknown format — cannot price without the shop confirming
+}
+
 const PORT        = process.env.PORT || 3000;
 const UPLOAD_DIR  = path.join(__dirname, 'uploads');
 const PUBLIC_DIR  = path.join(__dirname, 'public');
@@ -59,6 +127,11 @@ async function initDb() {
       user_id TEXT NOT NULL,
       expires_at BIGINT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS print_jobs (
+      id TEXT PRIMARY KEY,
+      data JSONB NOT NULL,
+      created_at BIGINT NOT NULL
+    );
   `);
   const { rows } = await db.query('SELECT data FROM users');
   for (const row of rows) users.set(row.data.id, row.data);
@@ -66,7 +139,12 @@ async function initDb() {
     'SELECT token, user_id, expires_at FROM auth_tokens WHERE expires_at > $1', [Date.now()]
   );
   for (const t of tokens) authTokens.set(t.token, { userId: t.user_id, expiresAt: Number(t.expires_at) });
-  console.log(`  🗄️  DB ready — ${rows.length} users loaded`);
+  // Only recent jobs need to be live in memory; older ones stay queryable in Postgres.
+  const { rows: jobs } = await db.query(
+    'SELECT data FROM print_jobs WHERE created_at > $1', [Date.now() - 7 * 24 * 60 * 60 * 1000]
+  );
+  for (const j of jobs) printJobs.set(j.data.id, j.data);
+  console.log(`  🗄️  DB ready — ${rows.length} users, ${jobs.length} recent print jobs loaded`);
 }
 
 // ─── In-memory stores ─────────────────────────────────────────────────────────
@@ -76,7 +154,41 @@ const sseClients = new Map();
 const sseUserClients = new Map();
 const users      = new Map();
 const authTokens = new Map();
+const printJobs  = new Map(); // jobId → paid-print job (kiosk flow)
 const DELIVERY_TTL = 24 * 60 * 60 * 1000;
+const KIOSK_TTL    = 60 * 60 * 1000; // 1h — the customer is standing at the counter
+
+// ─── Print pricing (paise, so all money stays in integers) ────────────────────
+const DEFAULT_PRICING = { bwPerPage: 200, colorPerPage: 1000 }; // ₹2 B&W, ₹10 colour
+function shopPricing(user) {
+  const p = (user && user.printPricing) || {};
+  return {
+    bwPerPage:    Number.isFinite(p.bwPerPage)    ? p.bwPerPage    : DEFAULT_PRICING.bwPerPage,
+    colorPerPage: Number.isFinite(p.colorPerPage) ? p.colorPerPage : DEFAULT_PRICING.colorPerPage,
+  };
+}
+
+// Shape returned to clients — never exposes disk paths or internal file ids.
+function publicJob(j) {
+  return {
+    id: j.id, status: j.status,
+    files: j.files.map(f => ({ name: f.name, pages: f.pages })),
+    totalPages: j.totalPages, copies: j.copies, colorMode: j.colorMode,
+    unitPaise: j.unitPaise, amountPaise: j.amountPaise,
+    pagesUncertain: j.pagesUncertain,
+    createdAt: j.createdAt, paidAt: j.paidAt, printedAt: j.printedAt,
+  };
+}
+
+async function savePrintJob(job) {
+  printJobs.set(job.id, job);
+  try {
+    await db.query(
+      'INSERT INTO print_jobs (id, data, created_at) VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET data = $2',
+      [job.id, JSON.stringify(job), job.createdAt]
+    );
+  } catch (e) { console.error('savePrintJob error:', e.message); }
+}
 
 // ─── User / Auth persistence ──────────────────────────────────────────────────
 const AUTH_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -567,6 +679,21 @@ const server = http.createServer(async (req, res) => {
     return res.end();
   }
 
+  // ── Kiosk QR landing — paid, unattended printing at a shop counter ──
+  const kioskMatch = pathname.match(/^\/k\/([a-f0-9]+)$/i);
+  if (method === 'GET' && kioskMatch) {
+    const shop = users.get(kioskMatch[1]);
+    if (!shop) return serveStatic(res, path.join(PUBLIC_DIR, 'index.html'));
+    const kioskId = genSessionId('KSK-');
+    sessions.set(kioskId, {
+      id: kioskId, expiresAt: Date.now() + KIOSK_TTL, files: [],
+      kind: 'kiosk', toUserId: shop.id, fromUserId: null, fromName: null,
+    });
+    saveSessions();
+    res.writeHead(302, { Location: `/s/${kioskId.replace('KSK-', '').toLowerCase()}` });
+    return res.end();
+  }
+
   // ── API: Create session (open — no login required) ──
   if (method === 'POST' && pathname === '/api/sessions') {
     if (!checkRateLimit(ip, 30, 60000)) return json(res, 429, { error: 'Too many requests' });
@@ -584,7 +711,16 @@ const server = http.createServer(async (req, res) => {
     const sess = sessions.get(sid);
     if (!sess) return json(res, 404, { error: 'Session not found' });
     if (Date.now() > sess.expiresAt) { sessions.delete(sid); return json(res, 410, { error: 'Session expired' }); }
-    return json(res, 200, { valid: true, expiresAt: sess.expiresAt, fileCount: sess.files.length });
+    const payload = { valid: true, expiresAt: sess.expiresAt, fileCount: sess.files.length, kind: sess.kind || 'qr' };
+    if (sess.kind === 'kiosk') {
+      const shop = users.get(sess.toUserId);
+      payload.kiosk = {
+        shopName:     shop ? shop.name : 'Print Shop',
+        pricing:      shopPricing(shop),
+        paymentReady: razorpayConfigured(),
+      };
+    }
+    return json(res, 200, payload);
   }
 
   // ── API: Upload files ──
@@ -633,6 +769,8 @@ const server = http.createServer(async (req, res) => {
 
       const senderId    = fields.senderId    || null;
       const senderLabel = fields.senderLabel || null;
+      // Needed to price paid kiosk prints; null means "could not determine".
+      const pages       = detectPageCount(part.content, part.mime, part.filename);
 
       const info = {
         id: fileId,
@@ -645,10 +783,11 @@ const server = http.createServer(async (req, res) => {
         purpose,
         senderId,
         senderLabel,
+        pages,
       };
       fileStore.set(fileId, info);
       sess.files.push(fileId);
-      uploadedFiles.push({ id: fileId, name: part.filename, size: part.content.length, mimetype: part.mime, uploadedAt: info.uploadedAt, purpose, senderId, senderLabel });
+      uploadedFiles.push({ id: fileId, name: part.filename, size: part.content.length, mimetype: part.mime, uploadedAt: info.uploadedAt, purpose, senderId, senderLabel, pages });
     }
 
     saveSessions();
@@ -700,6 +839,129 @@ const server = http.createServer(async (req, res) => {
       sseEmitUser(sess.toUserId, 'file:deleted', { fileId });
     }
     return json(res, 200, { ok: true });
+  }
+
+  // ── API: Shop print pricing (owner reads / sets their own rates) ──
+  if (pathname === '/api/shop/pricing' && (method === 'GET' || method === 'POST')) {
+    const user = getAuthUser(req);
+    if (!user) return json(res, 401, { error: 'Not signed in' });
+    if (method === 'GET') {
+      return json(res, 200, { pricing: shopPricing(user), paymentReady: razorpayConfigured() });
+    }
+    let body; try { body = JSON.parse((await readBody(req)).toString()); } catch { return json(res, 400, { error: 'Invalid JSON' }); }
+    const bw    = parseInt(body.bwPerPage, 10);
+    const color = parseInt(body.colorPerPage, 10);
+    user.printPricing = {
+      bwPerPage:    Number.isFinite(bw)    && bw    >= 0 ? bw    : DEFAULT_PRICING.bwPerPage,
+      colorPerPage: Number.isFinite(color) && color >= 0 ? color : DEFAULT_PRICING.colorPerPage,
+    };
+    await saveUser(user);
+    return json(res, 200, { pricing: shopPricing(user) });
+  }
+
+  // ── API: Print jobs — quote everything uploaded in a kiosk session ──
+  if (method === 'POST' && pathname === '/api/print-jobs') {
+    if (!checkRateLimit(ip, 20, 60000)) return json(res, 429, { error: 'Too many requests' });
+    let body; try { body = JSON.parse((await readBody(req)).toString()); } catch { return json(res, 400, { error: 'Invalid JSON' }); }
+
+    const sid  = String(body.sessionId || '').toUpperCase();
+    const sess = sessions.get(sid);
+    if (!sess)                        return json(res, 404, { error: 'Session not found' });
+    if (sess.kind !== 'kiosk')        return json(res, 400, { error: 'Not a kiosk session' });
+    if (Date.now() > sess.expiresAt)  return json(res, 410, { error: 'Session expired' });
+    if (!sess.files.length)           return json(res, 400, { error: 'No files uploaded yet' });
+
+    const copies    = Math.min(Math.max(parseInt(body.copies, 10) || 1, 1), 50);
+    const colorMode = body.colorMode === 'color' ? 'color' : 'bw';
+    const pricing   = shopPricing(users.get(sess.toUserId));
+    const unitPaise = colorMode === 'color' ? pricing.colorPerPage : pricing.bwPerPage;
+
+    const jobFiles = [];
+    let totalPages = 0, pagesUncertain = false;
+    for (const fid of sess.files) {
+      const info = fileStore.get(fid);
+      if (!info) continue;
+      const pages = (Number.isFinite(info.pages) && info.pages > 0) ? info.pages : null;
+      if (pages === null) pagesUncertain = true;
+      totalPages += pages || 1; // unknown formats are billed as a single page until confirmed
+      jobFiles.push({ fileId: fid, name: info.originalName, pages, size: info.size });
+    }
+    if (!jobFiles.length) return json(res, 400, { error: 'No printable files found' });
+
+    const job = {
+      id: 'PJ-' + crypto.randomBytes(8).toString('hex'),
+      sessionId: sid,
+      shopUserId: sess.toUserId,
+      files: jobFiles,
+      totalPages, copies, colorMode,
+      unitPaise,
+      amountPaise: unitPaise * totalPages * copies,
+      pagesUncertain,
+      status: 'quoted',
+      razorpayOrderId: null, razorpayPaymentId: null,
+      createdAt: Date.now(), paidAt: null, printedAt: null,
+    };
+    await savePrintJob(job);
+    return json(res, 200, { job: publicJob(job) });
+  }
+
+  // ── API: Print job — open a Razorpay order ──
+  const orderMatch = pathname.match(/^\/api\/print-jobs\/(PJ-[a-f0-9]+)\/order$/i);
+  if (method === 'POST' && orderMatch) {
+    const job = printJobs.get(orderMatch[1]);
+    if (!job) return json(res, 404, { error: 'Print job not found' });
+    if (job.status === 'paid' || job.status === 'printed') return json(res, 409, { error: 'This job is already paid' });
+    if (!razorpayConfigured()) return json(res, 501, { error: 'Payments are not set up yet' });
+    try {
+      const order = await razorpayPost('/v1/orders', {
+        amount: job.amountPaise, currency: 'INR', receipt: job.id,
+        notes: { jobId: job.id, shopUserId: job.shopUserId },
+      });
+      job.razorpayOrderId = order.id;
+      job.status = 'awaiting_payment';
+      await savePrintJob(job);
+      return json(res, 200, {
+        orderId: order.id, amount: job.amountPaise, currency: 'INR',
+        keyId: process.env.RAZORPAY_KEY_ID, job: publicJob(job),
+      });
+    } catch (e) {
+      return json(res, 502, { error: e.message || 'Could not start payment' });
+    }
+  }
+
+  // ── API: Print job — verify payment, then release it for printing ──
+  const payVerifyMatch = pathname.match(/^\/api\/print-jobs\/(PJ-[a-f0-9]+)\/verify$/i);
+  if (method === 'POST' && payVerifyMatch) {
+    const job = printJobs.get(payVerifyMatch[1]);
+    if (!job) return json(res, 404, { error: 'Print job not found' });
+    let body; try { body = JSON.parse((await readBody(req)).toString()); } catch { return json(res, 400, { error: 'Invalid JSON' }); }
+
+    const orderId   = body.razorpay_order_id;
+    const paymentId = body.razorpay_payment_id;
+    const signature = body.razorpay_signature;
+    if (!orderId || orderId !== job.razorpayOrderId) return json(res, 400, { error: 'Order mismatch' });
+    if (!verifyRazorpaySignature(orderId, paymentId, signature)) {
+      return json(res, 400, { error: 'Payment verification failed' });
+    }
+
+    if (job.status !== 'paid' && job.status !== 'printed') {
+      job.status = 'paid';
+      job.razorpayPaymentId = paymentId;
+      job.paidAt = Date.now();
+      await savePrintJob(job);
+      // The shop desktop hears this now; in Phase 2 the Pi agent listens here too.
+      sseEmitUser(job.shopUserId, 'print:paid', { job: publicJob(job) });
+      sseEmit(job.sessionId, 'print:paid', { job: publicJob(job) });
+    }
+    return json(res, 200, { ok: true, job: publicJob(job) });
+  }
+
+  // ── API: Print job — status ──
+  const jobMatch = pathname.match(/^\/api\/print-jobs\/(PJ-[a-f0-9]+)$/i);
+  if (method === 'GET' && jobMatch) {
+    const job = printJobs.get(jobMatch[1]);
+    if (!job) return json(res, 404, { error: 'Print job not found' });
+    return json(res, 200, { job: publicJob(job) });
   }
 
   // ── API: SSE — desktop event stream ──

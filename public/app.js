@@ -437,6 +437,13 @@ const Mobile = (() => {
   let pendingFiles = [];
   let purpose = 'save'; // 'save' or 'print'
 
+  // Kiosk (paid print) state — only set when the session came from a /k/<uid> QR
+  let kioskInfo        = null; // { shopName, pricing, paymentReady }
+  let uploadedForPrint = [];   // uploaded files with their detected page counts
+  let copies           = 1;
+  let colorMode        = 'bw';
+  let currentJob       = null;
+
   // Generate a stable anonymous sender ID for this browser tab
   function getSenderId() {
     let id = sessionStorage.getItem('zb_sender_id');
@@ -454,9 +461,9 @@ const Mobile = (() => {
     const upper = sid.toUpperCase();
     // Session IDs always carry a prefix (ZIP- for QR sessions, DLV- for direct/shop deliveries)
     // that's stripped from the URL, so try each candidate until one resolves.
-    const candidates = upper.startsWith('ZIP-') || upper.startsWith('DLV-')
+    const candidates = /^(ZIP|DLV|KSK)-/.test(upper)
       ? [upper]
-      : ['ZIP-' + upper, 'DLV-' + upper];
+      : ['ZIP-' + upper, 'DLV-' + upper, 'KSK-' + upper];
     showState('mobile-connecting');
     // Retry for up to 20 seconds — gives desktop time to detect reconnect and recreate session
     const deadline = Date.now() + 20000;
@@ -469,6 +476,16 @@ const Mobile = (() => {
             sessionId = candidate;
             document.getElementById('mobile-session-code').textContent = sessionId;
             document.getElementById('mobile-session-code-choice').textContent = sessionId;
+            // A kiosk QR always means paid printing — skip the Save/Print choice.
+            if (data.kind === 'kiosk' && data.kiosk) {
+              kioskInfo = data.kiosk;
+              purpose = 'print';
+              const shopEl = document.getElementById('kiosk-shop-name');
+              if (shopEl) shopEl.textContent = kioskInfo.shopName;
+              applyPurposeUI();
+              showState('mobile-upload');
+              return;
+            }
             showState('mobile-choice');
             return;
           }
@@ -480,7 +497,7 @@ const Mobile = (() => {
   }
 
   function showState(id) {
-    ['mobile-connecting','mobile-invalid','mobile-choice','mobile-upload','mobile-success'].forEach(s => {
+    ['mobile-connecting','mobile-invalid','mobile-choice','mobile-upload','mobile-pay','mobile-success'].forEach(s => {
       const el = document.getElementById(s);
       if (el) el.style.display = (s === id) ? 'flex' : 'none';
     });
@@ -493,7 +510,10 @@ const Mobile = (() => {
   function applyPurposeUI() {
     const title = document.getElementById('upload-title');
     const sub   = document.getElementById('upload-sub');
-    if (purpose === 'print') {
+    if (kioskInfo) {
+      title.textContent = 'Choose Files to Print';
+      sub.textContent = `Printing at ${kioskInfo.shopName} — PDFs and images work best`;
+    } else if (purpose === 'print') {
       title.textContent = 'Send for Print';
       sub.textContent = 'Select files — they will only be printed, not saved';
     } else {
@@ -563,6 +583,17 @@ const Mobile = (() => {
         renderPreviews();
       });
 
+      // Kiosk sessions are paid — go to the quote instead of finishing here.
+      if (kioskInfo) {
+        // The server quotes every file in the session, so accumulate rather than replace.
+        uploadedForPrint = uploadedForPrint.concat((result && result.files) || []);
+        pendingFiles = [];
+        renderPreviews();
+        resetSendButton();
+        enterPayScreen();
+        return;
+      }
+
       const summary = pendingFiles.map(f =>
         `<div class="sent-file"><span>${fileIcon(f.type, f.name)}</span><span>${escHtml(f.name)} · ${fmtBytes(f.size)}</span></div>`
       ).join('');
@@ -600,16 +631,197 @@ const Mobile = (() => {
     });
   }
 
+  function resetSendButton() {
+    const btn = document.getElementById('send-btn');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Send Files'; }
+  }
+
   function reset() {
     pendingFiles = [];
     const list = document.getElementById('preview-list');
     if (list) list.innerHTML = '';
-    const btn = document.getElementById('send-btn');
-    if (btn) { btn.disabled = true; btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Send Files'; }
+    resetSendButton();
+    if (kioskInfo) {
+      // Start a fresh order at the same shop
+      uploadedForPrint = [];
+      copies = 1;
+      colorMode = 'bw';
+      currentJob = null;
+      showState('mobile-upload');
+      return;
+    }
     showState('mobile-choice');
   }
 
-  return { init, dragOver, dragLeave, drop, onFileSelect, removeFile, send, reset, chooseSave, choosePrint, backToChoice };
+  // ─── Kiosk: quote, adjust, pay ──────────────────────────────────────────────
+  function rupees(paise) {
+    const hasPaise = paise % 100 !== 0;
+    return '₹' + (paise / 100).toLocaleString('en-IN', {
+      minimumFractionDigits: hasPaise ? 2 : 0,
+      maximumFractionDigits: 2,
+    });
+  }
+
+  function kioskTotalPages() {
+    // Files whose page count could not be read are billed as one page until confirmed.
+    return uploadedForPrint.reduce((n, f) => n + (f.pages > 0 ? f.pages : 1), 0);
+  }
+
+  function enterPayScreen() {
+    copies = 1;
+    colorMode = 'bw';
+    renderQuote();
+    showState('mobile-pay');
+  }
+
+  function backToUpload() {
+    resetSendButton();
+    showState('mobile-upload');
+  }
+
+  function setColorMode(mode) {
+    colorMode = mode === 'color' ? 'color' : 'bw';
+    renderQuote();
+  }
+
+  function changeCopies(delta) {
+    copies = Math.min(Math.max(copies + delta, 1), 50);
+    renderQuote();
+  }
+
+  function renderQuote() {
+    if (!kioskInfo) return;
+    const listEl = document.getElementById('kiosk-file-list');
+    if (listEl) {
+      listEl.innerHTML = uploadedForPrint.map(f => `
+        <div class="kiosk-file">
+          <span class="kiosk-file-name">${escHtml(f.name)}</span>
+          <span class="kiosk-file-pages">${f.pages > 0 ? f.pages + (f.pages > 1 ? ' pages' : ' page') : 'pages unknown'}</span>
+        </div>`).join('');
+    }
+
+    const pages  = kioskTotalPages();
+    const unit   = colorMode === 'color' ? kioskInfo.pricing.colorPerPage : kioskInfo.pricing.bwPerPage;
+    const amount = unit * pages * copies;
+
+    const copiesEl = document.getElementById('kiosk-copies');
+    if (copiesEl) copiesEl.textContent = copies;
+    const breakdownEl = document.getElementById('kiosk-breakdown');
+    if (breakdownEl) {
+      breakdownEl.textContent =
+        `${pages} page${pages !== 1 ? 's' : ''} × ${copies} cop${copies !== 1 ? 'ies' : 'y'} × ${rupees(unit)}`;
+    }
+    const amountEl = document.getElementById('kiosk-amount');
+    if (amountEl) amountEl.textContent = rupees(amount);
+
+    const bwBtn = document.getElementById('kiosk-bw');
+    const clBtn = document.getElementById('kiosk-color');
+    if (bwBtn) bwBtn.classList.toggle('active', colorMode === 'bw');
+    if (clBtn) clBtn.classList.toggle('active', colorMode === 'color');
+
+    const warn = document.getElementById('kiosk-warning');
+    if (warn) {
+      const msgs = [];
+      if (uploadedForPrint.some(f => !(f.pages > 0))) {
+        msgs.push('We could not read the page count for some files, so they are counted as one page. The shop will confirm before printing.');
+      }
+      if (!kioskInfo.paymentReady) {
+        msgs.push('Online payment is not set up for this shop yet — please pay at the counter.');
+      }
+      warn.textContent = msgs.join(' ');
+      warn.style.display = msgs.length ? 'block' : 'none';
+    }
+
+    const payBtn = document.getElementById('kiosk-pay-btn');
+    if (payBtn) payBtn.disabled = !kioskInfo.paymentReady;
+  }
+
+  function resetPayButton() {
+    const btn   = document.getElementById('kiosk-pay-btn');
+    const label = document.getElementById('kiosk-pay-label');
+    if (btn)   btn.disabled = !(kioskInfo && kioskInfo.paymentReady);
+    if (label) label.textContent = 'Pay & Print';
+  }
+
+  async function payAndPrint() {
+    const btn   = document.getElementById('kiosk-pay-btn');
+    const label = document.getElementById('kiosk-pay-label');
+    if (btn)   btn.disabled = true;
+    if (label) label.textContent = 'Starting payment…';
+
+    try {
+      // The server re-prices the job itself — the on-screen figure is display only.
+      const jr = await fetch('/api/print-jobs', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, copies, colorMode }),
+      });
+      const jd = await jr.json();
+      if (!jr.ok) throw new Error(jd.error || 'Could not create the print job');
+      currentJob = jd.job;
+
+      const or = await fetch(`/api/print-jobs/${currentJob.id}/order`, { method: 'POST' });
+      const od = await or.json();
+      if (!or.ok) throw new Error(od.error || 'Could not start payment');
+      if (typeof Razorpay === 'undefined') throw new Error('Payment library did not load — check your connection');
+
+      const rzp = new Razorpay({
+        key: od.keyId,
+        amount: od.amount,
+        currency: od.currency,
+        order_id: od.orderId,
+        name: kioskInfo.shopName || 'ZipBeam Print',
+        description: `${currentJob.totalPages} page(s) × ${currentJob.copies} copy/copies`,
+        theme: { color: '#4F46E5' },
+        modal: { ondismiss: resetPayButton },
+        handler: async (resp) => {
+          try {
+            const vr = await fetch(`/api/print-jobs/${currentJob.id}/verify`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(resp),
+            });
+            const vd = await vr.json();
+            if (!vr.ok) throw new Error(vd.error || 'Payment verification failed');
+            onPaid(vd.job);
+          } catch (e) {
+            Toast.error(e.message || 'Payment verification failed');
+            resetPayButton();
+          }
+        },
+      });
+      rzp.on('payment.failed', (r) => {
+        Toast.error((r && r.error && r.error.description) || 'Payment failed');
+        resetPayButton();
+      });
+      rzp.open();
+    } catch (e) {
+      Toast.error(e.message || 'Could not start payment');
+      resetPayButton();
+    }
+  }
+
+  function onPaid(job) {
+    const titleEl = document.getElementById('success-title');
+    const textEl  = document.getElementById('success-text');
+    if (titleEl) titleEl.textContent = 'Payment Successful! 🎉';
+    if (textEl) {
+      textEl.textContent =
+        `${job.totalPages} page${job.totalPages !== 1 ? 's' : ''} × ${job.copies} cop${job.copies !== 1 ? 'ies' : 'y'} sent to ${kioskInfo.shopName}. Collect your printout at the counter.`;
+    }
+    const summaryEl = document.getElementById('sent-summary');
+    if (summaryEl) {
+      summaryEl.innerHTML = job.files
+        .map(f => `<div class="sent-file"><span>📄</span><span>${escHtml(f.name)}</span></div>`)
+        .join('');
+    }
+    showState('mobile-success');
+    Toast.success('Paid — your job is queued for printing');
+  }
+
+  return {
+    init, dragOver, dragLeave, drop, onFileSelect, removeFile, send, reset,
+    chooseSave, choosePrint, backToChoice,
+    backToUpload, setColorMode, changeCopies, payAndPrint,
+  };
 })();
 
 // ─── Auth Module ──────────────────────────────────────────────────────────────
