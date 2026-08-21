@@ -307,15 +307,14 @@
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               Download Your QR Code
             </button>
-            <button class="btn-qr-download btn-qr-atp" onclick="Account.downloadKioskQr()" title="For shops charging for prints">
+            <button class="btn-qr-download btn-qr-atp atp-only" onclick="Account.downloadKioskQr()" title="For ATP shops charging for prints" style="display:none">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-              Download Paid Print (ATP) Poster
+              Download ATP Poster
             </button>
             <a id="my-uid-whatsapp" class="btn-ghost" style="font-size:13px" target="_blank" rel="noopener">📤 Share via WhatsApp</a>
           </div>
-          <p class="account-panel-note">The <strong>ATP poster</strong> charges customers automatically — they scan, pay, and the print releases itself. Your plain QR code stays free for people sending you files.</p>
         </div>
-        <div class="account-panel-pricing">
+        <div class="account-panel-pricing atp-only" style="display:none">
           <p class="account-panel-label">ATP print rates</p>
           <label class="price-field">
             <span>Black &amp; white</span>

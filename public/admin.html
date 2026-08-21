@@ -40,6 +40,14 @@
     tr:hover td { background: #0F172A44; }
     .role-admin { background: #7C3AED22; color: #A78BFA; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 20px; border: 1px solid #7C3AED55; }
     .role-user  { background: #10B98122; color: #34D399; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 20px; border: 1px solid #10B98155; }
+    .atp-toggle {
+      background: transparent; border: 1px solid #334155; color: #64748B;
+      border-radius: 20px; padding: 3px 10px; font-size: 11px; font-weight: 600;
+      cursor: pointer; font-family: inherit; transition: all .15s;
+    }
+    .atp-toggle:hover:not(:disabled) { border-color: #7C3AED; color: #A78BFA; }
+    .atp-toggle.on { background: #7C3AED22; border-color: #7C3AED66; color: #A78BFA; }
+    .atp-toggle:disabled { opacity: .5; cursor: default; }
     .empty { text-align: center; padding: 40px; color: #475569; }
     #status { text-align: center; padding: 60px; color: #475569; }
   </style>
@@ -90,6 +98,7 @@
             <th>Name</th>
             <th>Email</th>
             <th>Role</th>
+            <th>ATP</th>
             <th>Credits</th>
             <th>Joined</th>
           </tr>
@@ -144,10 +153,35 @@
           <td>${u.name}</td>
           <td>${u.email}</td>
           <td><span class="role-${u.role}">${u.role}</span></td>
+          <td>
+            <button class="atp-toggle ${u.atpEnabled ? 'on' : ''}"
+                    onclick="toggleAtp('${u.id}', ${u.atpEnabled ? 'false' : 'true'}, this)">
+              ${u.atpEnabled ? '✓ Enabled' : 'Enable'}
+            </button>
+          </td>
           <td>${u.credits.toLocaleString()}</td>
           <td>${fmt(u.createdAt)}</td>
         </tr>`)
       .join('');
+  }
+
+  // ATP is enabled by hand when a device is physically installed at a shop.
+  async function toggleAtp(userId, enable, btn) {
+    const turningOn = enable === true || enable === 'true';
+    if (!turningOn && !confirm('Disable ATP for this shop?\n\nTheir paired print agents will be removed and their ATP QR will stop working.')) return;
+    btn.disabled = true;
+    try {
+      const r = await fetch(`/api/admin/users/${userId}/atp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: turningOn }),
+      });
+      if (!r.ok) throw new Error((await r.json()).error || 'Failed');
+      await load();
+    } catch (e) {
+      alert(e.message || 'Could not change ATP access');
+      btn.disabled = false;
+    }
   }
 
   load();

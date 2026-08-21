@@ -1003,9 +1003,15 @@ const Account = (() => {
       const text = encodeURIComponent(`Send me files on ZipBeam — open this link and scan or upload directly: ${location.origin}/u/${user.id}\n\nOr enter my ZipBeam ID on zipbeam.in: ${user.id}`);
       waLink.href = `https://wa.me/?text=${text}`;
     }
+    // ATP is invitation-only — an admin enables it when a device is installed.
+    // Ordinary accounts see the plain ZipBeam panel and nothing about paid print.
+    const isAtp = !!user.atpEnabled;
+    document.querySelectorAll('.atp-only').forEach(el => {
+      el.style.display = isAtp ? '' : 'none';
+    });
+
     loadRecentContacts();
-    loadPricing();
-    loadDevices();
+    if (isAtp) { loadPricing(); loadDevices(); }
     hydrateInbox();
     connectUserSSE();
   }

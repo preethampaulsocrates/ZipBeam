@@ -269,7 +269,18 @@ function getAuthUser(req) {
   return users.get(d.userId) || null;
 }
 function safeUser(u) {
-  return { id: u.id, name: u.name, email: u.email, role: u.role, credits: u.credits, createdAt: u.createdAt };
+  return {
+    id: u.id, name: u.name, email: u.email, role: u.role,
+    credits: u.credits, createdAt: u.createdAt,
+    atpEnabled: !!u.atpEnabled,
+  };
+}
+
+// ATP (the paid print kiosk) is not a self-serve feature. Operators are
+// enabled by an admin when a device is physically installed at their shop,
+// so ordinary signups can never mint a paid poster or charge customers.
+function isAtpShop(u) {
+  return !!(u && u.atpEnabled);
 }
 function addRecentContact(user, contactId, contactName) {
   if (!Array.isArray(user.recentContacts)) user.recentContacts = [];
@@ -293,8 +304,12 @@ async function ensureAdmin() {
   console.log(`  👤 Admin account ready: ${email}`);
 }
 
-// Boot: init DB then ensure admin
-initDb().then(() => ensureAdmin()).catch(e => { console.error('DB init failed:', e.message); });
+// Boot: load from the DB, then ensure the admin exists. ensureAdmin runs even
+// if the DB is unreachable so the account still exists in memory (it just will
+// not persist) — otherwise a DB blip would leave the instance with no admin.
+initDb()
+  .catch(e => console.error('DB init failed:', e.message))
+  .finally(() => ensureAdmin());
 
 // ─── Session persistence ──────────────────────────────────────────────────────
 function saveSessions() {
@@ -371,7 +386,8 @@ function getDeviceAuth(req) {
   if (!m) return null;
   for (const u of users.values()) {
     const dev = (u.devices || []).find(d => d.token === m[1]);
-    if (dev) return { user: u, device: dev };
+    // Revoking a shop's ATP access immediately disables its agents too.
+    if (dev) return isAtpShop(u) ? { user: u, device: dev } : null;
   }
   return null;
 }
@@ -622,6 +638,23 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, { users: [...users.values()].map(safeUser), totalDeliveries });
   }
 
+  // ── API: Admin — enable/disable ATP for a shop (done when a device is installed) ──
+  const atpToggleMatch = pathname.match(/^\/api\/admin\/users\/([a-f0-9]+)\/atp$/i);
+  if (method === 'POST' && atpToggleMatch) {
+    const admin = getAuthUser(req);
+    if (!admin || admin.role !== 'admin') return json(res, 403, { error: 'Admin only' });
+    const target = users.get(atpToggleMatch[1]);
+    if (!target) return json(res, 404, { error: 'User not found' });
+
+    let body; try { body = JSON.parse((await readBody(req)).toString()); } catch { body = {}; }
+    target.atpEnabled = !!body.enabled;
+    // Disabling also drops paired agents, so a removed device cannot print again.
+    if (!target.atpEnabled) target.devices = [];
+    await saveUser(target);
+    console.log(`  🖨  ATP ${target.atpEnabled ? 'ENABLED' : 'disabled'} for ${target.email} by ${admin.email}`);
+    return json(res, 200, { user: safeUser(target) });
+  }
+
   // ── Admin page ──
   if (method === 'GET' && pathname === '/admin') {
     return serveStatic(res, path.join(PUBLIC_DIR, 'admin.html'));
@@ -733,7 +766,9 @@ const server = http.createServer(async (req, res) => {
   const kioskMatch = pathname.match(/^\/k\/([a-f0-9]+)$/i);
   if (method === 'GET' && kioskMatch) {
     const shop = users.get(kioskMatch[1]);
-    if (!shop) return serveStatic(res, path.join(PUBLIC_DIR, 'index.html'));
+    // Indistinguishable from an unknown id, so a non-ATP account cannot be
+    // probed to discover whether it exists.
+    if (!shop || !isAtpShop(shop)) return serveStatic(res, path.join(PUBLIC_DIR, 'index.html'));
     const kioskId = genSessionId('KSK-');
     sessions.set(kioskId, {
       id: kioskId, expiresAt: Date.now() + KIOSK_TTL, files: [],
@@ -896,6 +931,7 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/shop/pricing' && (method === 'GET' || method === 'POST')) {
     const user = getAuthUser(req);
     if (!user) return json(res, 401, { error: 'Not signed in' });
+    if (!isAtpShop(user)) return json(res, 403, { error: 'ATP is not enabled for this account' });
     if (method === 'GET') {
       return json(res, 200, {
         pricing: shopPricing(user),
@@ -925,6 +961,8 @@ const server = http.createServer(async (req, res) => {
     if (sess.kind !== 'kiosk')        return json(res, 400, { error: 'Not a kiosk session' });
     if (Date.now() > sess.expiresAt)  return json(res, 410, { error: 'Session expired' });
     if (!sess.files.length)           return json(res, 400, { error: 'No files uploaded yet' });
+    // Defence in depth: even a session minted before ATP was revoked cannot bill.
+    if (!isAtpShop(users.get(sess.toUserId))) return json(res, 403, { error: 'This shop is not set up for paid printing' });
 
     const copies    = Math.min(Math.max(parseInt(body.copies, 10) || 1, 1), 50);
     const colorMode = body.colorMode === 'color' ? 'color' : 'bw';
@@ -1061,6 +1099,7 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/devices' && (method === 'GET' || method === 'POST')) {
     const user = getAuthUser(req);
     if (!user) return json(res, 401, { error: 'Not signed in' });
+    if (!isAtpShop(user)) return json(res, 403, { error: 'ATP is not enabled for this account' });
     if (!Array.isArray(user.devices)) user.devices = [];
 
     if (method === 'GET') {
@@ -1091,6 +1130,7 @@ const server = http.createServer(async (req, res) => {
   if (method === 'DELETE' && devDelMatch) {
     const user = getAuthUser(req);
     if (!user) return json(res, 401, { error: 'Not signed in' });
+    if (!isAtpShop(user)) return json(res, 403, { error: 'ATP is not enabled for this account' });
     const before = (user.devices || []).length;
     user.devices = (user.devices || []).filter(d => d.id !== devDelMatch[1]);
     if (user.devices.length === before) return json(res, 404, { error: 'Device not found' });
