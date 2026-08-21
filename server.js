@@ -177,7 +177,19 @@ function shopPricing(user) {
   };
 }
 
-// Shape returned to clients — never exposes disk paths or internal file ids.
+// Shop-facing shape — includes file ids, because the shop has to actually
+// fetch and print the files. Only ever sent to the shop that owns the job.
+function shopJob(j) {
+  return {
+    ...publicJob(j),
+    files: j.files.map(f => ({
+      fileId: f.fileId, name: f.name, pages: f.pages,
+      size: f.size, mimetype: f.mimetype,
+    })),
+  };
+}
+
+// Customer-facing shape — never exposes disk paths or internal file ids.
 function publicJob(j) {
   return {
     id: j.id, status: j.status,
@@ -647,7 +659,13 @@ const server = http.createServer(async (req, res) => {
         if (info) files.push({ id: info.id, name: info.originalName, size: info.size, mimetype: info.mimetype, uploadedAt: info.uploadedAt, purpose: info.purpose, fromName: sess.fromName || null });
       }
     }
-    return json(res, 200, { files });
+    // Paid-but-not-yet-printed kiosk jobs, so they survive a page reload.
+    // Unpaid kiosk uploads are deliberately excluded — nothing reaches the
+    // shop until the customer has actually paid for it.
+    const paidJobs = [...printJobs.values()]
+      .filter(j => j.shopUserId === user.id && j.status === 'paid')
+      .map(shopJob);
+    return json(res, 200, { files, paidJobs });
   }
 
   // ── API: SSE — per-user inbox stream (logged-in desktop listens here too) ──
@@ -857,7 +875,11 @@ const server = http.createServer(async (req, res) => {
     const user = getAuthUser(req);
     if (!user) return json(res, 401, { error: 'Not signed in' });
     if (method === 'GET') {
-      return json(res, 200, { pricing: shopPricing(user), paymentReady: razorpayConfigured() });
+      return json(res, 200, {
+        pricing: shopPricing(user),
+        paymentReady: paymentsMode() !== 'none',
+        paymentMode: paymentsMode(),
+      });
     }
     let body; try { body = JSON.parse((await readBody(req)).toString()); } catch { return json(res, 400, { error: 'Invalid JSON' }); }
     const bw    = parseInt(body.bwPerPage, 10);
@@ -895,7 +917,7 @@ const server = http.createServer(async (req, res) => {
       const pages = (Number.isFinite(info.pages) && info.pages > 0) ? info.pages : null;
       if (pages === null) pagesUncertain = true;
       totalPages += pages || 1; // unknown formats are billed as a single page until confirmed
-      jobFiles.push({ fileId: fid, name: info.originalName, pages, size: info.size });
+      jobFiles.push({ fileId: fid, name: info.originalName, pages, size: info.size, mimetype: info.mimetype });
     }
     if (!jobFiles.length) return json(res, 400, { error: 'No printable files found' });
 
@@ -974,7 +996,7 @@ const server = http.createServer(async (req, res) => {
         job.paidAt = Date.now();
         await savePrintJob(job);
         console.warn(`  ⚠️  MOCK PAYMENT — ${job.id} marked PAID without real money.`);
-        sseEmitUser(job.shopUserId, 'print:paid', { job: publicJob(job) });
+        sseEmitUser(job.shopUserId, 'print:paid', { job: shopJob(job) });
         sseEmit(job.sessionId, 'print:paid', { job: publicJob(job) });
       }
       return json(res, 200, { ok: true, mock: true, job: publicJob(job) });
@@ -995,7 +1017,7 @@ const server = http.createServer(async (req, res) => {
       job.paidAt = Date.now();
       await savePrintJob(job);
       // The shop desktop hears this now; in Phase 2 the Pi agent listens here too.
-      sseEmitUser(job.shopUserId, 'print:paid', { job: publicJob(job) });
+      sseEmitUser(job.shopUserId, 'print:paid', { job: shopJob(job) });
       sseEmit(job.sessionId, 'print:paid', { job: publicJob(job) });
     }
     return json(res, 200, { ok: true, job: publicJob(job) });

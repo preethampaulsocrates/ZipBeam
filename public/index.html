@@ -315,6 +315,20 @@
           </div>
           <p class="account-panel-note">The <strong>ATP poster</strong> charges customers automatically — they scan, pay, and the print releases itself. Your plain QR code stays free for people sending you files.</p>
         </div>
+        <div class="account-panel-pricing">
+          <p class="account-panel-label">ATP print rates</p>
+          <label class="price-field">
+            <span>Black &amp; white</span>
+            <span class="price-input-wrap">₹<input id="price-bw" type="number" min="0" step="0.25" value="2" /> <em>/ page</em></span>
+          </label>
+          <label class="price-field">
+            <span>Colour</span>
+            <span class="price-input-wrap">₹<input id="price-color" type="number" min="0" step="0.25" value="10" /> <em>/ page</em></span>
+          </label>
+          <button class="btn-ghost" style="font-size:13px;margin-top:8px" onclick="Account.savePricing()">Save rates</button>
+          <p id="price-status" class="price-status"></p>
+        </div>
+
         <div class="account-panel-right">
           <p class="account-panel-label">Send files to someone</p>
           <div class="send-to-uid-row">

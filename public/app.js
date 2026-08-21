@@ -1004,8 +1004,68 @@ const Account = (() => {
       waLink.href = `https://wa.me/?text=${text}`;
     }
     loadRecentContacts();
+    loadPricing();
     hydrateInbox();
     connectUserSSE();
+  }
+
+  // ─── ATP print rates ────────────────────────────────────────────────────────
+  async function loadPricing() {
+    try {
+      const r = await fetch('/api/shop/pricing');
+      if (!r.ok) return;
+      const { pricing } = await r.json();
+      const bw = document.getElementById('price-bw');
+      const cl = document.getElementById('price-color');
+      if (bw) bw.value = (pricing.bwPerPage / 100);
+      if (cl) cl.value = (pricing.colorPerPage / 100);
+    } catch {}
+  }
+
+  async function savePricing() {
+    const bwEl = document.getElementById('price-bw');
+    const clEl = document.getElementById('price-color');
+    const status = document.getElementById('price-status');
+    const bwRupees = parseFloat(bwEl && bwEl.value);
+    const clRupees = parseFloat(clEl && clEl.value);
+
+    if (!Number.isFinite(bwRupees) || bwRupees < 0 || !Number.isFinite(clRupees) || clRupees < 0) {
+      if (status) { status.textContent = 'Enter a valid amount for both rates.'; status.className = 'price-status error'; }
+      return;
+    }
+    try {
+      // Rupees in the UI, paise on the wire — money stays integer server-side.
+      const r = await fetch('/api/shop/pricing', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bwPerPage:    Math.round(bwRupees * 100),
+          colorPerPage: Math.round(clRupees * 100),
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Could not save');
+      if (status) { status.textContent = 'Rates saved — new customers see these prices.'; status.className = 'price-status ok'; }
+      Toast.success('Print rates updated');
+    } catch (e) {
+      if (status) { status.textContent = e.message || 'Could not save rates'; status.className = 'price-status error'; }
+    }
+  }
+
+  // Turn a paid job into file rows grouped under one ATP heading.
+  function showPaidJob(job) {
+    const label = `ATP · ${job.copies} cop${job.copies !== 1 ? 'ies' : 'y'} · ₹${(job.amountPaise / 100).toLocaleString('en-IN')} paid`;
+    (job.files || []).forEach(f => Desktop.addExternalFile({
+      id: f.fileId,
+      name: f.name,
+      size: f.size || 0,
+      mimetype: f.mimetype || '',
+      uploadedAt: job.paidAt || Date.now(),
+      purpose: 'print',
+      isNew: true,
+      senderId: 'atp-' + job.id,
+      senderLabel: label,
+      copies: job.copies,
+    }));
   }
 
   function copyMyUid() {
@@ -1302,8 +1362,9 @@ const Account = (() => {
     try {
       const r = await fetch('/api/inbox');
       if (!r.ok) return;
-      const { files } = await r.json();
+      const { files, paidJobs } = await r.json();
       files.forEach(f => Desktop.addExternalFile(f));
+      (paidJobs || []).forEach(showPaidJob);
     } catch {}
   }
 
@@ -1317,9 +1378,19 @@ const Account = (() => {
       Toast.success(`${newFiles.length} file${newFiles.length > 1 ? 's' : ''} received${who}!`);
       loadRecentContacts();
     });
+
+    // A customer paid at the ATP kiosk — only now do their files reach the shop.
+    userEventSource.addEventListener('print:paid', (e) => {
+      const { job } = JSON.parse(e.data);
+      showPaidJob(job);
+      const amount = '₹' + (job.amountPaise / 100).toLocaleString('en-IN');
+      Toast.success(
+        `💰 Paid print job — ${job.totalPages} page${job.totalPages !== 1 ? 's' : ''} × ${job.copies} cop${job.copies !== 1 ? 'ies' : 'y'} (${amount})`
+      );
+    });
   }
 
-  return { init, toggleBar, copyMyUid, downloadMyQr, downloadKioskQr, sendToUid };
+  return { init, toggleBar, copyMyUid, downloadMyQr, downloadKioskQr, sendToUid, savePricing };
 })();
 
 // ─── Router (runs last, after modules defined) ────────────────────────────────

@@ -1702,6 +1702,44 @@ body {
 }
 .account-panel-left { flex: 1; min-width: 220px; }
 .account-panel-right { flex: 1; min-width: 220px; }
+.account-panel-pricing { flex: 0 0 190px; min-width: 170px; }
+
+.price-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: var(--gray-600);
+}
+.price-input-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 13px;
+  color: var(--gray-500);
+}
+.price-input-wrap input {
+  width: 58px;
+  padding: 5px 7px;
+  border: 1px solid var(--gray-200);
+  border-radius: 7px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--card);
+  outline: none;
+}
+.price-input-wrap input:focus {
+  border-color: var(--indigo);
+  box-shadow: 0 0 0 3px rgba(79,70,229,0.12);
+}
+.price-input-wrap em { font-style: normal; font-size: 11.5px; color: var(--gray-400); }
+.price-status { font-size: 11.5px; margin-top: 7px; line-height: 1.5; min-height: 15px; }
+.price-status.ok    { color: var(--emerald); }
+.price-status.error { color: var(--danger); }
 .account-panel-label {
   font-size: 12px;
   font-weight: 600;
