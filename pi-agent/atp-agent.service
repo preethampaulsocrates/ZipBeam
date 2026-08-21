@@ -1,0 +1,17 @@
+[Unit]
+Description=ATP Print Agent
+After=network-online.target cups.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=%i
+WorkingDirectory=/home/%i/ZipBeam/pi-agent
+ExecStart=/usr/bin/node /home/%i/ZipBeam/pi-agent/agent.js
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

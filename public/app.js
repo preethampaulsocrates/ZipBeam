@@ -1005,6 +1005,7 @@ const Account = (() => {
     }
     loadRecentContacts();
     loadPricing();
+    loadDevices();
     hydrateInbox();
     connectUserSSE();
   }
@@ -1049,6 +1050,62 @@ const Account = (() => {
     } catch (e) {
       if (status) { status.textContent = e.message || 'Could not save rates'; status.className = 'price-status error'; }
     }
+  }
+
+  // ─── Print agents (paired Raspberry Pis) ────────────────────────────────────
+  async function loadDevices() {
+    try {
+      const r = await fetch('/api/devices');
+      if (!r.ok) return;
+      const { devices } = await r.json();
+      const el = document.getElementById('device-list');
+      if (!el) return;
+      el.innerHTML = devices.length
+        ? devices.map(d => `
+            <div class="device-row">
+              <span class="device-dot ${d.online ? 'online' : ''}"></span>
+              <span class="device-name">${escHtml(d.name)}</span>
+              <button class="device-remove" onclick="Account.unpairDevice('${d.id}')" title="Unpair">✕</button>
+            </div>`).join('')
+        : '<p class="device-empty">No printer paired yet</p>';
+    } catch {}
+  }
+
+  async function pairDevice() {
+    const name = prompt('Name this printer (e.g. "Counter printer")', 'Counter printer');
+    if (name === null) return;
+    try {
+      const r = await fetch('/api/devices', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim() || 'Print agent' }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Could not pair');
+      const box = document.getElementById('device-token-box');
+      const tok = document.getElementById('device-token');
+      if (tok) tok.textContent = d.device.token;
+      if (box) box.style.display = 'block';
+      loadDevices();
+      Toast.success('Printer paired — copy the token into the Pi');
+    } catch (e) { Toast.error(e.message || 'Could not pair printer'); }
+  }
+
+  function copyDeviceToken() {
+    const tok = document.getElementById('device-token');
+    if (!tok) return;
+    navigator.clipboard?.writeText(tok.textContent)
+      .then(() => Toast.success('Token copied'))
+      .catch(() => Toast.show(tok.textContent));
+  }
+
+  async function unpairDevice(id) {
+    if (!confirm('Unpair this printer? Its agent will stop receiving jobs.')) return;
+    try {
+      const r = await fetch(`/api/devices/${id}`, { method: 'DELETE' });
+      if (!r.ok) throw new Error('Could not unpair');
+      loadDevices();
+      Toast.success('Printer unpaired');
+    } catch (e) { Toast.error(e.message); }
   }
 
   // Turn a paid job into file rows grouped under one ATP heading.
@@ -1390,7 +1447,10 @@ const Account = (() => {
     });
   }
 
-  return { init, toggleBar, copyMyUid, downloadMyQr, downloadKioskQr, sendToUid, savePricing };
+  return {
+    init, toggleBar, copyMyUid, downloadMyQr, downloadKioskQr, sendToUid, savePricing,
+    pairDevice, copyDeviceToken, unpairDevice,
+  };
 })();
 
 // ─── Router (runs last, after modules defined) ────────────────────────────────

@@ -164,6 +164,7 @@ const sseUserClients = new Map();
 const users      = new Map();
 const authTokens = new Map();
 const printJobs  = new Map(); // jobId → paid-print job (kiosk flow)
+const sseDeviceClients = new Map(); // userId → Set of res (paired Pi print agents)
 const DELIVERY_TTL = 24 * 60 * 60 * 1000;
 const KIOSK_TTL    = 60 * 60 * 1000; // 1h — the customer is standing at the counter
 
@@ -363,6 +364,27 @@ function sseEmit(sessionId, event, data) {
     try { res.write(msg); } catch {}
   }
 }
+// A paired print agent (Raspberry Pi) authenticates with a Bearer device token
+// rather than a browser session, since it has no login UI.
+function getDeviceAuth(req) {
+  const m = (req.headers.authorization || '').match(/^Bearer\s+([a-f0-9]{64})$/i);
+  if (!m) return null;
+  for (const u of users.values()) {
+    const dev = (u.devices || []).find(d => d.token === m[1]);
+    if (dev) return { user: u, device: dev };
+  }
+  return null;
+}
+
+function sseEmitDevice(userId, event, data) {
+  const clients = sseDeviceClients.get(userId);
+  if (!clients || clients.size === 0) return;
+  const msg = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  for (const res of clients) {
+    try { res.write(msg); } catch {}
+  }
+}
+
 function sseEmitUser(userId, event, data) {
   const clients = sseUserClients.get(userId);
   if (!clients || clients.size === 0) return;
@@ -997,6 +1019,7 @@ const server = http.createServer(async (req, res) => {
         await savePrintJob(job);
         console.warn(`  ⚠️  MOCK PAYMENT — ${job.id} marked PAID without real money.`);
         sseEmitUser(job.shopUserId, 'print:paid', { job: shopJob(job) });
+        sseEmitDevice(job.shopUserId, 'print:paid', { job: shopJob(job) });
         sseEmit(job.sessionId, 'print:paid', { job: publicJob(job) });
       }
       return json(res, 200, { ok: true, mock: true, job: publicJob(job) });
@@ -1016,8 +1039,9 @@ const server = http.createServer(async (req, res) => {
       job.razorpayPaymentId = paymentId;
       job.paidAt = Date.now();
       await savePrintJob(job);
-      // The shop desktop hears this now; in Phase 2 the Pi agent listens here too.
+      // Both the shop's browser and its paired print agent hear this.
       sseEmitUser(job.shopUserId, 'print:paid', { job: shopJob(job) });
+      sseEmitDevice(job.shopUserId, 'print:paid', { job: shopJob(job) });
       sseEmit(job.sessionId, 'print:paid', { job: publicJob(job) });
     }
     return json(res, 200, { ok: true, job: publicJob(job) });
@@ -1029,6 +1053,122 @@ const server = http.createServer(async (req, res) => {
     const job = printJobs.get(jobMatch[1]);
     if (!job) return json(res, 404, { error: 'Print job not found' });
     return json(res, 200, { job: publicJob(job) });
+  }
+
+  // ═══ Print agent (Raspberry Pi) ═════════════════════════════════════════════
+
+  // ── API: Devices — shop pairs / lists / revokes its print agents ──
+  if (pathname === '/api/devices' && (method === 'GET' || method === 'POST')) {
+    const user = getAuthUser(req);
+    if (!user) return json(res, 401, { error: 'Not signed in' });
+    if (!Array.isArray(user.devices)) user.devices = [];
+
+    if (method === 'GET') {
+      // Never return the token again after creation.
+      return json(res, 200, {
+        devices: user.devices.map(d => ({
+          id: d.id, name: d.name, createdAt: d.createdAt, lastSeenAt: d.lastSeenAt || null,
+          online: (sseDeviceClients.get(user.id) || new Set()).size > 0,
+        })),
+      });
+    }
+
+    let body; try { body = JSON.parse((await readBody(req)).toString()); } catch { body = {}; }
+    const device = {
+      id: 'DEV-' + crypto.randomBytes(4).toString('hex'),
+      name: String(body.name || 'Print agent').slice(0, 60),
+      token: crypto.randomBytes(32).toString('hex'),
+      createdAt: Date.now(),
+      lastSeenAt: null,
+    };
+    user.devices.push(device);
+    await saveUser(user);
+    // The token is shown exactly once — it is not retrievable afterwards.
+    return json(res, 200, { device: { id: device.id, name: device.name, token: device.token } });
+  }
+
+  const devDelMatch = pathname.match(/^\/api\/devices\/(DEV-[a-f0-9]+)$/i);
+  if (method === 'DELETE' && devDelMatch) {
+    const user = getAuthUser(req);
+    if (!user) return json(res, 401, { error: 'Not signed in' });
+    const before = (user.devices || []).length;
+    user.devices = (user.devices || []).filter(d => d.id !== devDelMatch[1]);
+    if (user.devices.length === before) return json(res, 404, { error: 'Device not found' });
+    await saveUser(user);
+    return json(res, 200, { ok: true });
+  }
+
+  // ── API: Agent — jobs waiting to print (catches up after downtime) ──
+  if (method === 'GET' && pathname === '/api/agent/jobs') {
+    const auth = getDeviceAuth(req);
+    if (!auth) return json(res, 401, { error: 'Invalid device token' });
+    auth.device.lastSeenAt = Date.now();
+    const jobs = [...printJobs.values()]
+      .filter(j => j.shopUserId === auth.user.id && j.status === 'paid')
+      .map(shopJob);
+    return json(res, 200, { jobs, shopName: auth.user.name });
+  }
+
+  // ── API: Agent — live stream of paid jobs ──
+  if (method === 'GET' && pathname === '/api/agent/events') {
+    const auth = getDeviceAuth(req);
+    if (!auth) return json(res, 401, { error: 'Invalid device token' });
+    auth.device.lastSeenAt = Date.now();
+    saveUser(auth.user);
+
+    res.writeHead(200, {
+      'Content-Type':  'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection':    'keep-alive',
+    });
+    res.write(':ok\n\n');
+
+    const uid = auth.user.id;
+    if (!sseDeviceClients.has(uid)) sseDeviceClients.set(uid, new Set());
+    sseDeviceClients.get(uid).add(res);
+
+    const keepalive = setInterval(() => {
+      try { res.write(':ping\n\n'); } catch { clearInterval(keepalive); }
+    }, 25000);
+
+    req.on('close', () => {
+      clearInterval(keepalive);
+      const set = sseDeviceClients.get(uid);
+      if (set) { set.delete(res); if (set.size === 0) sseDeviceClients.delete(uid); }
+    });
+    return;
+  }
+
+  // ── API: Agent — report a job printed (or failed) ──
+  const jobDoneMatch = pathname.match(/^\/api\/agent\/jobs\/(PJ-[a-f0-9]+)\/(printed|failed)$/i);
+  if (method === 'POST' && jobDoneMatch) {
+    const auth = getDeviceAuth(req);
+    if (!auth) return json(res, 401, { error: 'Invalid device token' });
+    const job = printJobs.get(jobDoneMatch[1]);
+    if (!job) return json(res, 404, { error: 'Print job not found' });
+    if (job.shopUserId !== auth.user.id) return json(res, 403, { error: 'Not your job' });
+
+    let body; try { body = JSON.parse((await readBody(req)).toString()); } catch { body = {}; }
+
+    if (jobDoneMatch[2].toLowerCase() === 'printed') {
+      job.status = 'printed';
+      job.printedAt = Date.now();
+      await savePrintJob(job);
+      // Paid prints are not kept — clear the files now that they are on paper.
+      for (const f of job.files) {
+        const info = fileStore.get(f.fileId);
+        if (info) { const sid = info.sessionId; deleteFile(f.fileId); sseEmit(sid, 'file:deleted', { fileId: f.fileId }); }
+        sseEmitUser(job.shopUserId, 'file:deleted', { fileId: f.fileId });
+      }
+      sseEmitUser(job.shopUserId, 'print:done', { job: publicJob(job) });
+    } else {
+      job.status = 'failed';
+      job.error = String(body.error || 'Print failed').slice(0, 300);
+      await savePrintJob(job);
+      sseEmitUser(job.shopUserId, 'print:failed', { job: publicJob(job), error: job.error });
+    }
+    auth.device.lastSeenAt = Date.now();
+    return json(res, 200, { ok: true, status: job.status });
   }
 
   // ── API: SSE — desktop event stream ──

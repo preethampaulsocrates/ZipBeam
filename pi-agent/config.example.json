@@ -1,0 +1,7 @@
+{
+  "serverUrl": "https://zipbeam.in",
+  "deviceToken": "paste-the-64-character-token-from-zipbeam-here",
+  "printer": "Brother_HL_B2080DW",
+  "duplex": false,
+  "extraLpOptions": []
+}

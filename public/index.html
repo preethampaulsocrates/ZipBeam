@@ -327,6 +327,15 @@
           </label>
           <button class="btn-ghost" style="font-size:13px;margin-top:8px" onclick="Account.savePricing()">Save rates</button>
           <p id="price-status" class="price-status"></p>
+
+          <p class="account-panel-label" style="margin-top:18px">Print agent</p>
+          <div id="device-list" class="device-list"></div>
+          <button class="btn-ghost" style="font-size:13px" onclick="Account.pairDevice()">+ Pair a printer</button>
+          <div id="device-token-box" class="device-token-box" style="display:none">
+            <p class="device-token-warn">Copy this now — it is shown only once.</p>
+            <code id="device-token"></code>
+            <button class="copy-btn" onclick="Account.copyDeviceToken()" title="Copy token">📋</button>
+          </div>
         </div>
 
         <div class="account-panel-right">
