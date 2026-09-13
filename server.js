@@ -203,6 +203,25 @@ function publicJob(j) {
   };
 }
 
+// Idempotent: the checkout callback and the Razorpay webhook can both report
+// the same payment, in either order, and the job must be released only once.
+// Status is set before the first await, so two near-simultaneous calls cannot
+// both get past the check.
+async function markJobPaid(job, paymentId, source) {
+  if (job.status === 'paid' || job.status === 'printed') return false;
+  job.status = 'paid';
+  job.razorpayPaymentId = paymentId;
+  job.paidAt = Date.now();
+  job.paidVia = source;
+  await savePrintJob(job);
+  // Both the shop's browser and its paired print agent hear this.
+  sseEmitUser(job.shopUserId, 'print:paid', { job: shopJob(job) });
+  sseEmitDevice(job.shopUserId, 'print:paid', { job: shopJob(job) });
+  sseEmit(job.sessionId, 'print:paid', { job: publicJob(job) });
+  console.log(`  💰 ${job.id} paid via ${source} (${job.amountPaise} paise)`);
+  return true;
+}
+
 async function savePrintJob(job) {
   printJobs.set(job.id, job);
   try {
@@ -1050,15 +1069,8 @@ const server = http.createServer(async (req, res) => {
     // itself was opened in mock mode, so a real job can never be settled this way.
     if (mode === 'mock') {
       if (!job.mock) return json(res, 400, { error: 'This job was not created in mock mode' });
-      if (job.status !== 'paid' && job.status !== 'printed') {
-        job.status = 'paid';
-        job.razorpayPaymentId = 'mock_pay_' + crypto.randomBytes(6).toString('hex');
-        job.paidAt = Date.now();
-        await savePrintJob(job);
+      if (await markJobPaid(job, 'mock_pay_' + crypto.randomBytes(6).toString('hex'), 'mock')) {
         console.warn(`  ⚠️  MOCK PAYMENT — ${job.id} marked PAID without real money.`);
-        sseEmitUser(job.shopUserId, 'print:paid', { job: shopJob(job) });
-        sseEmitDevice(job.shopUserId, 'print:paid', { job: shopJob(job) });
-        sseEmit(job.sessionId, 'print:paid', { job: publicJob(job) });
       }
       return json(res, 200, { ok: true, mock: true, job: publicJob(job) });
     }
@@ -1072,17 +1084,47 @@ const server = http.createServer(async (req, res) => {
       return json(res, 400, { error: 'Payment verification failed' });
     }
 
-    if (job.status !== 'paid' && job.status !== 'printed') {
-      job.status = 'paid';
-      job.razorpayPaymentId = paymentId;
-      job.paidAt = Date.now();
-      await savePrintJob(job);
-      // Both the shop's browser and its paired print agent hear this.
-      sseEmitUser(job.shopUserId, 'print:paid', { job: shopJob(job) });
-      sseEmitDevice(job.shopUserId, 'print:paid', { job: shopJob(job) });
-      sseEmit(job.sessionId, 'print:paid', { job: publicJob(job) });
-    }
+    await markJobPaid(job, paymentId, 'checkout');
     return json(res, 200, { ok: true, job: publicJob(job) });
+  }
+
+  // ── API: Razorpay webhook — server-to-server payment confirmation ──
+  // The checkout callback depends on the customer's phone reporting back. If
+  // the battery dies or the tab closes right after paying, only this webhook
+  // tells us the money arrived, so the job still prints.
+  if (method === 'POST' && pathname === '/api/razorpay/webhook') {
+    const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+    if (!secret) {
+      console.error('  ✖ Razorpay webhook received but RAZORPAY_WEBHOOK_SECRET is not set');
+      return json(res, 501, { error: 'Webhook not configured' });
+    }
+    const raw = await readBody(req);
+    // Razorpay signs the exact raw bytes, so verify before parsing anything.
+    const expected = crypto.createHmac('sha256', secret).update(raw).digest('hex');
+    let valid = false;
+    try {
+      valid = crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(String(req.headers['x-razorpay-signature'] || '')));
+    } catch {}
+    if (!valid) return json(res, 400, { error: 'Invalid webhook signature' });
+
+    let evt; try { evt = JSON.parse(raw.toString()); } catch { return json(res, 400, { error: 'Invalid JSON' }); }
+    const pay = evt && evt.payload && evt.payload.payment && evt.payload.payment.entity;
+
+    if ((evt.event === 'payment.captured' || evt.event === 'order.paid') && pay && pay.order_id) {
+      const job = [...printJobs.values()].find(j => j.razorpayOrderId === pay.order_id);
+      if (!job) {
+        console.warn(`  ⚠ Webhook ${evt.event}: no print job for order ${pay.order_id}`);
+      } else if (job.mock) {
+        console.warn(`  ⚠ Webhook ignored for mock job ${job.id}`);
+      } else if (pay.status !== 'captured' || pay.amount !== job.amountPaise || pay.currency !== 'INR') {
+        // Never release a print for anything other than the full quoted amount.
+        console.error(`  ✖ Webhook for ${job.id} rejected: status=${pay.status} amount=${pay.amount} (expected ${job.amountPaise}) currency=${pay.currency}`);
+      } else {
+        await markJobPaid(job, pay.id, 'webhook');
+      }
+    }
+    // Acknowledge every correctly signed event, otherwise Razorpay keeps retrying it.
+    return json(res, 200, { ok: true });
   }
 
   // ── API: Print job — status ──
@@ -1278,7 +1320,11 @@ server.listen(PORT, () => {
     console.log('  ⚠️   Unset PAYMENTS_MODE before going live.');
     console.log('  ═══════════════════════════════════════════════════');
   } else if (mode === 'razorpay') {
-    console.log('  💳 Payments: Razorpay (live keys configured)');
+    const live = String(process.env.RAZORPAY_KEY_ID).startsWith('rzp_live_');
+    console.log(`  💳 Payments: Razorpay — ${live ? 'LIVE keys (real money)' : 'TEST keys (no real money)'}`);
+    console.log(process.env.RAZORPAY_WEBHOOK_SECRET
+      ? '  🔔 Razorpay webhook: configured'
+      : "  ⚠️  Razorpay webhook: NOT configured — payments rely on the customer's phone reporting back");
   } else {
     console.log('  💳 Payments: not configured — kiosk will ask customers to pay at the counter');
   }
