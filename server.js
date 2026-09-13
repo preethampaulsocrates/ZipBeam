@@ -33,8 +33,14 @@ function verifyGoogleIdToken(idToken) {
 const { Pool } = require('pg');
 
 // ─── Razorpay (no SDK — plain HTTPS + HMAC) ──────────────────────────────────
+// Env values pasted into a dashboard often pick up stray spaces or a newline,
+// which makes Razorpay reject otherwise-correct keys — always read them trimmed.
+function rzpEnv(name) {
+  return String(process.env[name] || "").trim();
+}
+
 function razorpayConfigured() {
-  return !!(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET);
+  return !!(rzpEnv("RAZORPAY_KEY_ID") && rzpEnv("RAZORPAY_KEY_SECRET"));
 }
 
 // 'razorpay' = real money. 'mock' = simulated, for testing the flow without a
@@ -50,7 +56,7 @@ function razorpayPost(apiPath, payload) {
   return new Promise((resolve, reject) => {
     if (!razorpayConfigured()) return reject(new Error('Razorpay is not configured'));
     const body = JSON.stringify(payload);
-    const auth = Buffer.from(`${process.env.RAZORPAY_KEY_ID}:${process.env.RAZORPAY_KEY_SECRET}`).toString('base64');
+    const auth = Buffer.from(`${rzpEnv("RAZORPAY_KEY_ID")}:${rzpEnv("RAZORPAY_KEY_SECRET")}`).toString('base64');
     const r = https.request({
       hostname: 'api.razorpay.com',
       path: apiPath,
@@ -78,9 +84,9 @@ function razorpayPost(apiPath, payload) {
 
 // Razorpay signs `${order_id}|${payment_id}` with the key secret.
 function verifyRazorpaySignature(orderId, paymentId, signature) {
-  if (!process.env.RAZORPAY_KEY_SECRET || !signature) return false;
+  if (!rzpEnv("RAZORPAY_KEY_SECRET") || !signature) return false;
   const expected = crypto
-    .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+    .createHmac('sha256', rzpEnv("RAZORPAY_KEY_SECRET"))
     .update(`${orderId}|${paymentId}`)
     .digest('hex');
   try {
@@ -1049,9 +1055,11 @@ const server = http.createServer(async (req, res) => {
       await savePrintJob(job);
       return json(res, 200, {
         orderId: order.id, amount: job.amountPaise, currency: 'INR',
-        keyId: process.env.RAZORPAY_KEY_ID, job: publicJob(job),
+        keyId: rzpEnv("RAZORPAY_KEY_ID"), job: publicJob(job),
       });
     } catch (e) {
+      // Surface the gateway error in the server logs, not just on the customer's phone.
+      console.error(`  ✖ Razorpay order failed for ${job.id}: ${e.message}`);
       return json(res, 502, { error: e.message || 'Could not start payment' });
     }
   }
@@ -1093,7 +1101,7 @@ const server = http.createServer(async (req, res) => {
   // the battery dies or the tab closes right after paying, only this webhook
   // tells us the money arrived, so the job still prints.
   if (method === 'POST' && pathname === '/api/razorpay/webhook') {
-    const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+    const secret = rzpEnv("RAZORPAY_WEBHOOK_SECRET");
     if (!secret) {
       console.error('  ✖ Razorpay webhook received but RAZORPAY_WEBHOOK_SECRET is not set');
       return json(res, 501, { error: 'Webhook not configured' });
@@ -1320,9 +1328,9 @@ server.listen(PORT, () => {
     console.log('  ⚠️   Unset PAYMENTS_MODE before going live.');
     console.log('  ═══════════════════════════════════════════════════');
   } else if (mode === 'razorpay') {
-    const live = String(process.env.RAZORPAY_KEY_ID).startsWith('rzp_live_');
+    const live = rzpEnv("RAZORPAY_KEY_ID").startsWith('rzp_live_');
     console.log(`  💳 Payments: Razorpay — ${live ? 'LIVE keys (real money)' : 'TEST keys (no real money)'}`);
-    console.log(process.env.RAZORPAY_WEBHOOK_SECRET
+    console.log(rzpEnv("RAZORPAY_WEBHOOK_SECRET")
       ? '  🔔 Razorpay webhook: configured'
       : "  ⚠️  Razorpay webhook: NOT configured — payments rely on the customer's phone reporting back");
   } else {
