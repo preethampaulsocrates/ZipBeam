@@ -175,13 +175,21 @@ const DELIVERY_TTL = 24 * 60 * 60 * 1000;
 const KIOSK_TTL    = 60 * 60 * 1000; // 1h — the customer is standing at the counter
 
 // ─── Print pricing (paise, so all money stays in integers) ────────────────────
-const DEFAULT_PRICING = { bwPerPage: 200, colorPerPage: 1000 }; // ₹2 B&W, ₹10 colour
+// A shop sells up to three things, each with its own rate and on/off switch.
+// Shops that set rates before the switches existed keep B&W and colour on;
+// plain paper stays off until the shop chooses to offer it.
+const DEFAULT_PRICING = {
+  bwPerPage: 200, colorPerPage: 1000, plainPerSheet: 100, // ₹2 B&W, ₹10 colour, ₹1 blank sheet
+  bwEnabled: true, colorEnabled: true, plainEnabled: false,
+};
+const PRICE_KEYS  = ['bwPerPage', 'colorPerPage', 'plainPerSheet'];
+const TOGGLE_KEYS = ['bwEnabled', 'colorEnabled', 'plainEnabled'];
 function shopPricing(user) {
   const p = (user && user.printPricing) || {};
-  return {
-    bwPerPage:    Number.isFinite(p.bwPerPage)    ? p.bwPerPage    : DEFAULT_PRICING.bwPerPage,
-    colorPerPage: Number.isFinite(p.colorPerPage) ? p.colorPerPage : DEFAULT_PRICING.colorPerPage,
-  };
+  const out = {};
+  for (const k of PRICE_KEYS)  out[k] = Number.isFinite(p[k]) ? p[k] : DEFAULT_PRICING[k];
+  for (const k of TOGGLE_KEYS) out[k] = typeof p[k] === 'boolean' ? p[k] : DEFAULT_PRICING[k];
+  return out;
 }
 
 // Shop-facing shape — includes file ids, because the shop has to actually
@@ -189,7 +197,7 @@ function shopPricing(user) {
 function shopJob(j) {
   return {
     ...publicJob(j),
-    files: j.files.map(f => ({
+    files: (j.files || []).map(f => ({
       fileId: f.fileId, name: f.name, pages: f.pages,
       size: f.size, mimetype: f.mimetype,
     })),
@@ -199,9 +207,10 @@ function shopJob(j) {
 // Customer-facing shape — never exposes disk paths or internal file ids.
 function publicJob(j) {
   return {
-    id: j.id, status: j.status,
-    files: j.files.map(f => ({ name: f.name, pages: f.pages })),
+    id: j.id, status: j.status, kind: j.kind || 'print',
+    files: (j.files || []).map(f => ({ name: f.name, pages: f.pages })),
     totalPages: j.totalPages, copies: j.copies, colorMode: j.colorMode,
+    sheets: j.sheets || 0,
     unitPaise: j.unitPaise, amountPaise: j.amountPaise,
     pagesUncertain: j.pagesUncertain,
     mock: !!j.mock,
@@ -949,6 +958,18 @@ const server = http.createServer(async (req, res) => {
     if (sess && sess.kind === 'delivery' && sess.toUserId) {
       sseEmitUser(sess.toUserId, 'file:deleted', { fileId });
     }
+    // A paid kiosk job printed from the shop's browser: once all of its files
+    // are gone it is finished, so it must not reappear on reload or reach a Pi.
+    for (const job of printJobs.values()) {
+      if (job.status !== 'paid' || !(job.files || []).some(f => f.fileId === fileId)) continue;
+      if (job.files.every(f => !fileStore.has(f.fileId))) {
+        job.status = 'printed';
+        job.printedAt = Date.now();
+        job.completedVia = 'files-removed';
+        await savePrintJob(job);
+        sseEmitUser(job.shopUserId, 'print:done', { job: publicJob(job) });
+      }
+    }
     return json(res, 200, { ok: true });
   }
 
@@ -965,17 +986,47 @@ const server = http.createServer(async (req, res) => {
       });
     }
     let body; try { body = JSON.parse((await readBody(req)).toString()); } catch { return json(res, 400, { error: 'Invalid JSON' }); }
-    const bw    = parseInt(body.bwPerPage, 10);
-    const color = parseInt(body.colorPerPage, 10);
-    user.printPricing = {
-      bwPerPage:    Number.isFinite(bw)    && bw    >= 0 ? bw    : DEFAULT_PRICING.bwPerPage,
-      colorPerPage: Number.isFinite(color) && color >= 0 ? color : DEFAULT_PRICING.colorPerPage,
-    };
+    // Only the fields sent are changed; everything else keeps its current value.
+    const next = shopPricing(user);
+    for (const k of PRICE_KEYS) {
+      if (body[k] === undefined) continue;
+      const v = Number(body[k]);
+      // Whole paise, capped at ₹10,000 so a typo cannot create an absurd price.
+      if (!Number.isInteger(v) || v < 0 || v > 1000000) {
+        return json(res, 400, { error: 'Prices must be between ₹0 and ₹10,000' });
+      }
+      next[k] = v;
+    }
+    for (const k of TOGGLE_KEYS) {
+      if (body[k] !== undefined) next[k] = !!body[k];
+    }
+    if (!next.bwEnabled && !next.colorEnabled && !next.plainEnabled) {
+      return json(res, 400, { error: 'Turn on at least one option so customers can order' });
+    }
+    user.printPricing = next;
     await saveUser(user);
     return json(res, 200, { pricing: shopPricing(user) });
   }
 
-  // ── API: Print jobs — quote everything uploaded in a kiosk session ──
+  // ── API: Shop marks a paid order done (plain paper handed over, or finished by hand) ──
+  const shopDoneMatch = pathname.match(/^\/api\/shop\/jobs\/(PJ-[a-f0-9]+)\/done$/i);
+  if (method === 'POST' && shopDoneMatch) {
+    const user = getAuthUser(req);
+    if (!user) return json(res, 401, { error: 'Not signed in' });
+    if (!isAtpShop(user)) return json(res, 403, { error: 'ATP is not enabled for this account' });
+    const job = printJobs.get(shopDoneMatch[1]);
+    // Another shop's order looks exactly like a missing one.
+    if (!job || job.shopUserId !== user.id) return json(res, 404, { error: 'Order not found' });
+    if (job.status !== 'paid') return json(res, 409, { error: `This order is already ${job.status}` });
+    job.status = 'printed';
+    job.printedAt = Date.now();
+    job.completedVia = 'shop';
+    await savePrintJob(job);
+    sseEmitUser(job.shopUserId, 'print:done', { job: publicJob(job) });
+    return json(res, 200, { ok: true });
+  }
+
+  // ── API: Print jobs — quote a kiosk order (printing or plain paper) ──
   if (method === 'POST' && pathname === '/api/print-jobs') {
     if (!checkRateLimit(ip, 20, 60000)) return json(res, 429, { error: 'Too many requests' });
     let body; try { body = JSON.parse((await readBody(req)).toString()); } catch { return json(res, 400, { error: 'Invalid JSON' }); }
@@ -985,40 +1036,63 @@ const server = http.createServer(async (req, res) => {
     if (!sess)                        return json(res, 404, { error: 'Session not found' });
     if (sess.kind !== 'kiosk')        return json(res, 400, { error: 'Not a kiosk session' });
     if (Date.now() > sess.expiresAt)  return json(res, 410, { error: 'Session expired' });
-    if (!sess.files.length)           return json(res, 400, { error: 'No files uploaded yet' });
     // Defence in depth: even a session minted before ATP was revoked cannot bill.
     if (!isAtpShop(users.get(sess.toUserId))) return json(res, 403, { error: 'This shop is not set up for paid printing' });
 
-    const copies    = Math.min(Math.max(parseInt(body.copies, 10) || 1, 1), 50);
-    const colorMode = body.colorMode === 'color' ? 'color' : 'bw';
-    const pricing   = shopPricing(users.get(sess.toUserId));
-    const unitPaise = colorMode === 'color' ? pricing.colorPerPage : pricing.bwPerPage;
-
-    const jobFiles = [];
-    let totalPages = 0, pagesUncertain = false;
-    for (const fid of sess.files) {
-      const info = fileStore.get(fid);
-      if (!info) continue;
-      const pages = (Number.isFinite(info.pages) && info.pages > 0) ? info.pages : null;
-      if (pages === null) pagesUncertain = true;
-      totalPages += pages || 1; // unknown formats are billed as a single page until confirmed
-      jobFiles.push({ fileId: fid, name: info.originalName, pages, size: info.size, mimetype: info.mimetype });
-    }
-    if (!jobFiles.length) return json(res, 400, { error: 'No printable files found' });
-
-    const job = {
+    const kind    = body.kind === 'plain' ? 'plain' : 'print';
+    const pricing = shopPricing(users.get(sess.toUserId));
+    const base = {
       id: 'PJ-' + crypto.randomBytes(8).toString('hex'),
       sessionId: sid,
       shopUserId: sess.toUserId,
-      files: jobFiles,
-      totalPages, copies, colorMode,
-      unitPaise,
-      amountPaise: unitPaise * totalPages * copies,
-      pagesUncertain,
       status: 'quoted',
       razorpayOrderId: null, razorpayPaymentId: null,
       createdAt: Date.now(), paidAt: null, printedAt: null,
     };
+    let job;
+
+    // The switches are enforced here as well as on the phone, which only hides
+    // options — a crafted request cannot buy something the shop has turned off.
+    if (kind === 'plain') {
+      if (!pricing.plainEnabled) return json(res, 400, { error: 'Plain paper is not available at this print point' });
+      const sheets = Math.min(Math.max(parseInt(body.sheets, 10) || 1, 1), 100);
+      job = {
+        ...base, kind: 'plain',
+        files: [], sheets,
+        totalPages: sheets, copies: 1, colorMode: null,
+        unitPaise: pricing.plainPerSheet,
+        amountPaise: pricing.plainPerSheet * sheets,
+        pagesUncertain: false,
+      };
+    } else {
+      if (!sess.files.length) return json(res, 400, { error: 'No files uploaded yet' });
+      const colorMode = body.colorMode === 'color' ? 'color' : 'bw';
+      if (colorMode === 'color' && !pricing.colorEnabled) return json(res, 400, { error: 'Colour printing is not available at this print point' });
+      if (colorMode === 'bw' && !pricing.bwEnabled)       return json(res, 400, { error: 'Black & white printing is not available at this print point' });
+      const copies    = Math.min(Math.max(parseInt(body.copies, 10) || 1, 1), 50);
+      const unitPaise = colorMode === 'color' ? pricing.colorPerPage : pricing.bwPerPage;
+
+      const jobFiles = [];
+      let totalPages = 0, pagesUncertain = false;
+      for (const fid of sess.files) {
+        const info = fileStore.get(fid);
+        if (!info) continue;
+        const pages = (Number.isFinite(info.pages) && info.pages > 0) ? info.pages : null;
+        if (pages === null) pagesUncertain = true;
+        totalPages += pages || 1; // unknown formats are billed as a single page until confirmed
+        jobFiles.push({ fileId: fid, name: info.originalName, pages, size: info.size, mimetype: info.mimetype });
+      }
+      if (!jobFiles.length) return json(res, 400, { error: 'No printable files found' });
+
+      job = {
+        ...base, kind: 'print',
+        files: jobFiles, sheets: 0,
+        totalPages, copies, colorMode,
+        unitPaise,
+        amountPaise: unitPaise * totalPages * copies,
+        pagesUncertain,
+      };
+    }
     await savePrintJob(job);
     return json(res, 200, { job: publicJob(job) });
   }
@@ -1044,6 +1118,9 @@ const server = http.createServer(async (req, res) => {
         amount: job.amountPaise, currency: 'INR', job: publicJob(job),
       });
     }
+
+    // Razorpay will not open an order for less than ₹1.
+    if (job.amountPaise < 100) return json(res, 400, { error: 'The minimum online payment is ₹1' });
 
     try {
       const order = await razorpayPost('/v1/orders', {

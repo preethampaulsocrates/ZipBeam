@@ -1702,7 +1702,36 @@ body {
 }
 .account-panel-left { flex: 1; min-width: 220px; }
 .account-panel-right { flex: 1; min-width: 220px; }
-.account-panel-pricing { flex: 0 0 190px; min-width: 170px; }
+.account-panel-pricing { flex: 0 0 260px; min-width: 240px; }
+
+/* ATP option rows: switch · name · price */
+.price-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 9px;
+}
+.price-option-name { flex: 1; font-size: 13px; color: var(--gray-600); }
+.price-option .price-option-name,
+.price-option .price-input-wrap { transition: opacity 0.2s; }
+.price-option.off .price-option-name,
+.price-option.off .price-input-wrap { opacity: 0.45; }
+
+.switch { position: relative; width: 32px; height: 18px; flex-shrink: 0; cursor: pointer; }
+.switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.switch-slider {
+  position: absolute; inset: 0; border-radius: 999px;
+  background: var(--gray-300); transition: background 0.2s;
+}
+.switch-slider::before {
+  content: ''; position: absolute; top: 2px; left: 2px;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  transition: transform 0.2s;
+}
+.switch input:checked + .switch-slider { background: var(--indigo); }
+.switch input:checked + .switch-slider::before { transform: translateX(14px); }
+.switch input:focus-visible + .switch-slider { box-shadow: 0 0 0 3px rgba(79,70,229,0.25); }
 
 .price-field {
   display: flex;
@@ -2197,6 +2226,106 @@ body::before {
   text-align: center;
   letter-spacing: 0.01em;
 }
+
+/* ── ATP intro — plays after a customer scans a kiosk QR ── */
+.atp-intro {
+  position: fixed; inset: 0; z-index: 1000;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 6px; padding: 24px; text-align: center; color: #fff; cursor: pointer;
+  background: linear-gradient(150deg, #4F46E5 0%, #7C3AED 55%, #A855F7 100%);
+  overflow: hidden;
+  transition: opacity 0.45s ease;
+}
+.atp-intro.leaving { opacity: 0; }
+.atp-intro > * { position: relative; }
+.atp-intro-glow {
+  position: absolute !important;
+  width: 140vmax; height: 140vmax;
+  background: radial-gradient(circle, rgba(34,211,238,0.35) 0%, transparent 55%);
+  opacity: 0; transform: scale(0.4);
+}
+.atp-intro-mark {
+  width: 84px; height: 84px; margin-bottom: 14px; border-radius: 24px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,0.18);
+  box-shadow: 0 12px 40px rgba(15,23,42,0.25), inset 0 1px 0 rgba(255,255,255,0.35);
+  opacity: 0; transform: scale(0.6) rotate(-8deg);
+}
+.atp-intro-paper { opacity: 0; transform: translateY(6px); }
+.atp-intro-word {
+  font-family: var(--font-head); font-size: 64px; font-weight: 800;
+  letter-spacing: 0.04em; line-height: 1;
+  opacity: 0; transform: translateY(14px);
+}
+.atp-intro-sub {
+  font-size: 13px; font-weight: 700; letter-spacing: 0.38em; text-transform: uppercase;
+  opacity: 0;
+}
+.atp-intro-tagline {
+  margin-top: 22px; max-width: 280px;
+  font-size: 16px; line-height: 1.5; color: rgba(255,255,255,0.92);
+  opacity: 0; transform: translateY(10px);
+}
+.atp-intro-bar {
+  margin-top: 28px; width: 120px; height: 3px; border-radius: 999px;
+  background: rgba(255,255,255,0.25); overflow: hidden;
+}
+.atp-intro-bar span { display: block; width: 0; height: 100%; border-radius: inherit; background: #fff; }
+
+.atp-intro.playing .atp-intro-glow    { animation: atpGlow 2.4s ease-out forwards; }
+.atp-intro.playing .atp-intro-mark    { animation: atpPop 0.6s cubic-bezier(0.16,1,0.3,1) 0.05s forwards; }
+.atp-intro.playing .atp-intro-paper   { animation: atpPaper 0.8s ease-out 0.5s forwards; }
+.atp-intro.playing .atp-intro-word    { animation: atpRise 0.55s cubic-bezier(0.16,1,0.3,1) 0.3s forwards; }
+.atp-intro.playing .atp-intro-sub     { animation: atpFade 0.5s ease 0.55s forwards; }
+.atp-intro.playing .atp-intro-tagline { animation: atpRise 0.6s cubic-bezier(0.16,1,0.3,1) 0.85s forwards; }
+.atp-intro.playing .atp-intro-bar span { animation: atpBar 2.2s linear 0.1s forwards; }
+
+@keyframes atpGlow  { 0% { opacity: 0; transform: scale(0.4); } 40% { opacity: 1; } 100% { opacity: 0.6; transform: scale(1); } }
+@keyframes atpPop   { to { opacity: 1; transform: scale(1) rotate(0deg); } }
+@keyframes atpPaper { to { opacity: 1; transform: translateY(0); } }
+@keyframes atpRise  { to { opacity: 1; transform: translateY(0); } }
+@keyframes atpFade  { to { opacity: 0.9; } }
+@keyframes atpBar   { to { width: 100%; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .atp-intro.playing *,
+  .atp-intro.playing .atp-intro-bar span { animation: none !important; opacity: 1 !important; transform: none !important; }
+  .atp-intro-glow, .atp-intro-bar { display: none; }
+}
+
+/* ── Kiosk: what do you need today? ── */
+.kiosk-choice-list { width: 100%; display: flex; flex-direction: column; gap: 12px; margin-top: 6px; }
+.kiosk-choice {
+  width: 100%; display: flex; align-items: center; gap: 14px;
+  padding: 16px; text-align: left; cursor: pointer; font-family: inherit;
+  border-radius: var(--radius);
+  background: var(--glass);
+  backdrop-filter: blur(14px) saturate(150%);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  border: 1.5px solid var(--glass-border);
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.2s cubic-bezier(0.16,1,0.3,1), box-shadow 0.2s, border-color 0.2s;
+  animation: cardRise 0.5s cubic-bezier(0.16,1,0.3,1) both;
+}
+.kiosk-choice:nth-child(2) { animation-delay: 0.08s; }
+.kiosk-choice:hover,
+.kiosk-choice:active {
+  transform: translateY(-2px);
+  border-color: rgba(79,70,229,0.35);
+  box-shadow: var(--shadow-md);
+}
+.kiosk-choice-icon {
+  width: 48px; height: 48px; flex-shrink: 0; border-radius: 14px;
+  display: flex; align-items: center; justify-content: center; font-size: 24px;
+  background: linear-gradient(135deg, rgba(6,182,212,0.12), rgba(124,58,237,0.14));
+}
+.kiosk-choice-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.kiosk-choice-text strong { font-family: var(--font-head); font-size: 16px; color: var(--text); }
+.kiosk-choice-text em { font-style: normal; font-size: 12.5px; color: var(--gray-500); }
+.kiosk-choice-price { font-size: 13px; font-weight: 700; color: var(--indigo); white-space: nowrap; }
+
+.kiosk-row-first { border-top: none; padding-top: 4px; }
+.kiosk-mode-only { font-size: 13px; font-weight: 700; color: var(--indigo); }
 
 /* ── Kiosk: paid print order card ── */
 .kiosk-card {

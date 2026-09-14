@@ -53,6 +53,30 @@ const cfg = loadConfig();
 const api  = cfg.serverUrl.startsWith('https') ? https : http;
 const WORK_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'atp-'));
 
+// A single empty A4 page. Printing it N times feeds N blank sheets, which is how
+// the kiosk sells plain paper without any extra hardware.
+function writeBlankPdf(dest) {
+  const objs = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << >> /Contents 4 0 R >>',
+    '<< /Length 0 >>\nstream\n\nendstream',
+  ];
+  let pdf = '%PDF-1.4\n';
+  const offsets = [];
+  objs.forEach((o, i) => {
+    offsets.push(Buffer.byteLength(pdf));
+    pdf += `${i + 1} 0 obj\n${o}\nendobj\n`;
+  });
+  const xref = Buffer.byteLength(pdf);
+  pdf += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n`;
+  for (const off of offsets) pdf += `${String(off).padStart(10, '0')} 00000 n \n`;
+  pdf += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  fs.writeFileSync(dest, pdf);
+  return dest;
+}
+const BLANK_PDF = writeBlankPdf(path.join(WORK_DIR, 'blank-a4.pdf'));
+
 function log(...a)  { console.log(`[${new Date().toISOString()}]`, ...a); }
 function warn(...a) { console.warn(`[${new Date().toISOString()}]`, ...a); }
 
@@ -140,11 +164,19 @@ async function handleJob(job) {
   printing.add(job.id);
 
   const copies = Math.max(1, parseInt(job.copies, 10) || 1);
-  log(`▶ Job ${job.id}: ${job.files.length} file(s), ${job.totalPages} page(s) × ${copies} cop${copies !== 1 ? 'ies' : 'y'} — ₹${(job.amountPaise / 100)}`);
-
   const temps = [];
   try {
-    for (const f of job.files) {
+    if (job.kind === 'plain') {
+      // Plain paper: feed blank sheets straight through — no download, no toner.
+      const sheets = Math.max(1, parseInt(job.sheets, 10) || 1);
+      log(`▶ Job ${job.id}: plain paper × ${sheets} sheet${sheets !== 1 ? 's' : ''} — ₹${(job.amountPaise / 100)}`);
+      const out = await lp(['-d', cfg.printer, '-n', String(sheets), '-o', 'ColorModel=Gray', BLANK_PDF]);
+      log(`  ✓ Fed ${sheets} blank sheet${sheets !== 1 ? 's' : ''} — ${out}`);
+    } else {
+      log(`▶ Job ${job.id}: ${job.files.length} file(s), ${job.totalPages} page(s) × ${copies} cop${copies !== 1 ? 'ies' : 'y'} — ₹${(job.amountPaise / 100)}`);
+    }
+
+    for (const f of job.kind === 'plain' ? [] : job.files) {
       const safe = String(f.name || 'file').replace(/[^A-Za-z0-9._-]/g, '_').slice(-80);
       const dest = path.join(WORK_DIR, `${job.id}-${f.fileId}-${safe}`);
       await downloadFile(f.fileId, dest);

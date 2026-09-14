@@ -229,6 +229,21 @@ const Desktop = (() => {
     }
 
     function fileCard(f) {
+      // Plain-paper orders have no file — the shop ticks them off once the sheets are handed over.
+      if (f.purpose === 'plain') {
+        return `
+        <div class="file-item" id="fi-${f.id}">
+          <div class="file-icon">📄</div>
+          <div class="file-info">
+            <div class="file-name">${escHtml(f.name)} ${f.isNew ? '<span class="new-tag">New</span>' : ''} <span class="print-tag">Plain paper</span></div>
+            <div class="file-meta">
+              <span>${fmtTime(f.uploadedAt)}</span>
+              <span class="type-tag">No printing</span>
+            </div>
+          </div>
+          <button class="btn-dl" onclick="Desktop.markOrderDone('${f.jobId}')">✓ Handed over</button>
+        </div>`;
+      }
       const safeName = escHtml(f.name).replace(/'/g, "\\'");
       let actionBtn;
       if (f.purpose === 'print') {
@@ -428,7 +443,32 @@ const Desktop = (() => {
     }
   }
 
-  return { init, newSession, copyCode, downloadFile, printFile, triggerFramePrint, closePrintModal, addExternalFile: addFile };
+  // Drop every row belonging to one sender — used to clear an ATP order once it is done.
+  function removeBySender(senderId) {
+    let changed = false;
+    for (const id of Object.keys(files)) {
+      if (files[id].senderId === senderId) { delete files[id]; changed = true; }
+    }
+    if (changed) renderFiles();
+  }
+
+  async function markOrderDone(jobId) {
+    try {
+      const r = await fetch(`/api/shop/jobs/${jobId}/done`, { method: 'POST' });
+      const d = await r.json().catch(() => ({}));
+      // 409 means it was already closed (e.g. the Pi finished it) — clear it either way.
+      if (!r.ok && r.status !== 409) throw new Error(d.error || 'Could not update the order');
+      removeBySender('atp-' + jobId);
+      Toast.success('Order marked as handed over');
+    } catch (e) {
+      Toast.error(e.message || 'Could not update the order');
+    }
+  }
+
+  return {
+    init, newSession, copyCode, downloadFile, printFile, triggerFramePrint, closePrintModal,
+    addExternalFile: addFile, removeBySender, markOrderDone,
+  };
 })();
 
 // ─── Mobile Module ────────────────────────────────────────────────────────────
@@ -442,6 +482,7 @@ const Mobile = (() => {
   let uploadedForPrint = [];   // uploaded files with their detected page counts
   let copies           = 1;
   let colorMode        = 'bw';
+  let sheets           = 1;     // plain-paper order size
   let currentJob       = null;
 
   // Generate a stable anonymous sender ID for this browser tab
@@ -480,15 +521,18 @@ const Mobile = (() => {
             if (data.kind === 'kiosk' && data.kiosk) {
               kioskInfo = data.kiosk;
               purpose = 'print';
-              const shopEl = document.getElementById('kiosk-shop-name');
-              if (shopEl) shopEl.textContent = kioskInfo.shopName;
+              document.querySelectorAll('.kiosk-shop-label').forEach(el => { el.textContent = kioskInfo.shopName; });
+              // At a print point the upload screen talks about printing, not sending.
+              const uploadPill = document.querySelector('#mobile-upload .mobile-session-pill');
+              if (uploadPill) uploadPill.innerHTML = `${PRINTER_ICON} Printing at <strong>${escHtml(kioskInfo.shopName)}</strong>`;
               // The kiosk is its own brand at the counter; ZipBeam sits underneath.
               const brandEl = document.getElementById('mobile-brand-name');
               const subEl   = document.getElementById('mobile-brand-sub');
               if (brandEl) brandEl.textContent = 'ATP';
               if (subEl)   subEl.style.display = 'block';
               applyPurposeUI();
-              showState('mobile-upload');
+              refreshSendLabel();
+              playIntro(kioskHome);
               return;
             }
             showState('mobile-choice');
@@ -502,7 +546,7 @@ const Mobile = (() => {
   }
 
   function showState(id) {
-    ['mobile-connecting','mobile-invalid','mobile-choice','mobile-upload','mobile-pay','mobile-success'].forEach(s => {
+    ['mobile-connecting','mobile-invalid','mobile-choice','mobile-kiosk-choice','mobile-upload','mobile-pay','mobile-plain','mobile-success'].forEach(s => {
       const el = document.getElementById(s);
       if (el) el.style.display = (s === id) ? 'flex' : 'none';
     });
@@ -510,14 +554,17 @@ const Mobile = (() => {
 
   function chooseSave()  { purpose = 'save';  applyPurposeUI(); showState('mobile-upload'); }
   function choosePrint() { purpose = 'print'; applyPurposeUI(); showState('mobile-upload'); }
-  function backToChoice() { showState('mobile-choice'); }
+  function backToChoice() {
+    if (kioskInfo) return kioskHome();
+    showState('mobile-choice');
+  }
 
   function applyPurposeUI() {
     const title = document.getElementById('upload-title');
     const sub   = document.getElementById('upload-sub');
     if (kioskInfo) {
       title.textContent = 'Choose Files to Print';
-      sub.textContent = `Printing at ${kioskInfo.shopName} — PDFs and images work best`;
+      sub.textContent = 'PDFs and photos print best';
     } else if (purpose === 'print') {
       title.textContent = 'Send for Print';
       sub.textContent = 'Select files — they will only be printed, not saved';
@@ -571,7 +618,7 @@ const Mobile = (() => {
   async function send() {
     if (!pendingFiles.length) return;
     const btn = document.getElementById('send-btn');
-    if (btn) { btn.disabled = true; btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Sending…'; }
+    if (btn) { btn.disabled = true; btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> ' + (kioskInfo ? 'Uploading…' : 'Sending…'); }
 
     pendingFiles.forEach(f => { f._progress = 1; });
     renderPreviews();
@@ -608,7 +655,7 @@ const Mobile = (() => {
       showState('mobile-success');
       Toast.success(`${count} file${count > 1 ? 's' : ''} sent!`);
     } catch (err) {
-      if (btn) { btn.disabled = false; btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Send Files'; }
+      if (btn) { btn.disabled = false; btn.innerHTML = sendButtonHtml(); }
       pendingFiles.forEach(f => { f._progress = 0; });
       renderPreviews();
       Toast.error(err.message || 'Upload failed. Please try again.');
@@ -636,9 +683,23 @@ const Mobile = (() => {
     });
   }
 
+  const PRINTER_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>';
+
+  // At a print point the button leads to printing, so it says so.
+  function sendButtonHtml() {
+    return kioskInfo
+      ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg> Continue to Print'
+      : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Send Files';
+  }
+
+  function refreshSendLabel() {
+    const btn = document.getElementById('send-btn');
+    if (btn) btn.innerHTML = sendButtonHtml();
+  }
+
   function resetSendButton() {
     const btn = document.getElementById('send-btn');
-    if (btn) { btn.disabled = true; btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Send Files'; }
+    if (btn) { btn.disabled = true; btn.innerHTML = sendButtonHtml(); }
   }
 
   function reset() {
@@ -650,9 +711,9 @@ const Mobile = (() => {
       // Start a fresh order at the same shop
       uploadedForPrint = [];
       copies = 1;
-      colorMode = 'bw';
+      sheets = 1;
       currentJob = null;
-      showState('mobile-upload');
+      kioskHome();
       return;
     }
     showState('mobile-choice');
@@ -667,6 +728,139 @@ const Mobile = (() => {
     });
   }
 
+  // ─── Kiosk: intro and options ───────────────────────────────────────────────
+  // A short branded moment after scanning an ATP QR. Tapping skips it, and it is
+  // cut short for people who have asked their device to reduce motion.
+  let finishIntro = null;
+  function playIntro(next) {
+    const el = document.getElementById('atp-intro');
+    if (!el) return next();
+    const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    finishIntro = () => {
+      finishIntro = null;
+      next(); // draw the real screen underneath while the intro fades away
+      el.classList.add('leaving');
+      setTimeout(() => {
+        el.style.display = 'none';
+        el.classList.remove('leaving', 'playing');
+      }, 450);
+    };
+    el.style.display = 'flex';
+    // Read layout once so the start state is applied, then begin straight away.
+    // Waiting on requestAnimationFrame let the intro sit blank when frames were delayed.
+    void el.offsetWidth;
+    el.classList.add('playing');
+    setTimeout(() => { if (finishIntro) finishIntro(); }, reduced ? 700 : 2400);
+  }
+
+  function skipIntro() {
+    if (finishIntro) finishIntro();
+  }
+
+  // What this print point sells right now — the shop can switch each option off.
+  function kioskOptions() {
+    const p = kioskInfo.pricing;
+    return {
+      bw: !!p.bwEnabled, color: !!p.colorEnabled, plain: !!p.plainEnabled,
+      print: !!(p.bwEnabled || p.colorEnabled),
+    };
+  }
+
+  function kioskHome() {
+    const o = kioskOptions();
+    const p = kioskInfo.pricing;
+    const both = o.print && o.plain;
+
+    // With only one option there is no menu to return to, so those Back buttons go.
+    const uploadBack = document.getElementById('upload-back-btn');
+    const plainBack  = document.getElementById('plain-back-btn');
+    if (uploadBack) uploadBack.style.display = both ? '' : 'none';
+    if (plainBack)  plainBack.style.display  = both ? '' : 'none';
+
+    if (o.print && !o.plain) return kioskChoosePrint();
+    if (o.plain && !o.print) return enterPlainScreen();
+
+    // Either both options are on (show the menu) or none are (show a closed notice).
+    const printBtn = document.getElementById('kiosk-choice-print');
+    const plainBtn = document.getElementById('kiosk-choice-plain');
+    const closed   = document.getElementById('kiosk-closed');
+    if (printBtn) printBtn.style.display = both ? '' : 'none';
+    if (plainBtn) plainBtn.style.display = both ? '' : 'none';
+    if (closed)   closed.style.display   = both ? 'none' : 'block';
+
+    const printSub = document.getElementById('kiosk-choice-print-sub');
+    if (printSub) {
+      printSub.textContent = o.bw && o.color ? 'Black & white or colour' : (o.color ? 'Colour printing' : 'Black & white printing');
+    }
+    const printPrice = document.getElementById('kiosk-choice-print-price');
+    if (printPrice) {
+      const rates = [];
+      if (o.bw)    rates.push(p.bwPerPage);
+      if (o.color) rates.push(p.colorPerPage);
+      printPrice.textContent = rates.length
+        ? `${rates.length > 1 ? 'from ' : ''}${rupees(Math.min(...rates))}/page`
+        : '';
+    }
+    const plainPrice = document.getElementById('kiosk-choice-plain-price');
+    if (plainPrice) plainPrice.textContent = `${rupees(p.plainPerSheet)}/sheet`;
+
+    showState('mobile-kiosk-choice');
+  }
+
+  function kioskChoosePrint() {
+    purpose = 'print';
+    applyPurposeUI();
+    refreshSendLabel();
+    showState('mobile-upload');
+  }
+
+  function kioskChoosePlain() {
+    enterPlainScreen();
+  }
+
+  function backToKioskChoice() {
+    kioskHome();
+  }
+
+  function showMockFlags() {
+    document.querySelectorAll('.kiosk-mock-flag').forEach(el => {
+      el.style.display = kioskInfo.paymentMode === 'mock' ? 'block' : 'none';
+    });
+  }
+
+  // ─── Kiosk: plain paper ─────────────────────────────────────────────────────
+  function enterPlainScreen() {
+    sheets = 1;
+    renderPlain();
+    showState('mobile-plain');
+  }
+
+  function changeSheets(delta) {
+    sheets = Math.min(Math.max(sheets + delta, 1), 100);
+    renderPlain();
+  }
+
+  function renderPlain() {
+    if (!kioskInfo) return;
+    const unit = kioskInfo.pricing.plainPerSheet;
+    const sheetsEl = document.getElementById('kiosk-sheets');
+    if (sheetsEl) sheetsEl.textContent = sheets;
+    const breakdownEl = document.getElementById('plain-breakdown');
+    if (breakdownEl) breakdownEl.textContent = `${sheets} sheet${sheets !== 1 ? 's' : ''} × ${rupees(unit)}`;
+    const amountEl = document.getElementById('plain-amount');
+    if (amountEl) amountEl.textContent = rupees(unit * sheets);
+
+    showMockFlags();
+    const warn = document.getElementById('plain-warning');
+    if (warn) {
+      warn.textContent = kioskInfo.paymentReady ? '' : 'Online payment is not set up for this shop yet — please pay at the counter.';
+      warn.style.display = kioskInfo.paymentReady ? 'none' : 'block';
+    }
+    const payBtn = document.getElementById('plain-pay-btn');
+    if (payBtn) payBtn.disabled = !kioskInfo.paymentReady;
+  }
+
+  // ─── Kiosk: printing quote ──────────────────────────────────────────────────
   function kioskTotalPages() {
     // Files whose page count could not be read are billed as one page until confirmed.
     return uploadedForPrint.reduce((n, f) => n + (f.pages > 0 ? f.pages : 1), 0);
@@ -674,7 +868,7 @@ const Mobile = (() => {
 
   function enterPayScreen() {
     copies = 1;
-    colorMode = 'bw';
+    colorMode = kioskOptions().bw ? 'bw' : 'color';
     renderQuote();
     showState('mobile-pay');
   }
@@ -685,7 +879,9 @@ const Mobile = (() => {
   }
 
   function setColorMode(mode) {
-    colorMode = mode === 'color' ? 'color' : 'bw';
+    const next = mode === 'color' ? 'color' : 'bw';
+    if (!kioskOptions()[next]) return; // switched off by the shop
+    colorMode = next;
     renderQuote();
   }
 
@@ -719,13 +915,22 @@ const Mobile = (() => {
     const amountEl = document.getElementById('kiosk-amount');
     if (amountEl) amountEl.textContent = rupees(amount);
 
+    // Offer only the print types this shop has switched on.
+    const o = kioskOptions();
+    const single = !(o.bw && o.color);
+    const toggle = document.getElementById('kiosk-toggle');
+    const only   = document.getElementById('kiosk-mode-only');
+    if (toggle) toggle.style.display = single ? 'none' : '';
+    if (only) {
+      only.style.display = single ? 'inline' : 'none';
+      only.textContent = colorMode === 'color' ? 'Colour' : 'Black & white';
+    }
     const bwBtn = document.getElementById('kiosk-bw');
     const clBtn = document.getElementById('kiosk-color');
     if (bwBtn) bwBtn.classList.toggle('active', colorMode === 'bw');
     if (clBtn) clBtn.classList.toggle('active', colorMode === 'color');
 
-    const mockBanner = document.getElementById('kiosk-mock-banner');
-    if (mockBanner) mockBanner.style.display = kioskInfo.paymentMode === 'mock' ? 'block' : 'none';
+    showMockFlags();
 
     const warn = document.getElementById('kiosk-warning');
     if (warn) {
@@ -744,16 +949,31 @@ const Mobile = (() => {
     if (payBtn) payBtn.disabled = !kioskInfo.paymentReady;
   }
 
+  const PRINT_UI = { btn: 'kiosk-pay-btn', label: 'kiosk-pay-label', idle: 'Pay & Print' };
+  const PLAIN_UI = { btn: 'plain-pay-btn', label: 'plain-pay-label', idle: 'Pay & Get Paper' };
+  let activePayUi = PRINT_UI; // the screen that started the current payment
+
   function resetPayButton() {
-    const btn   = document.getElementById('kiosk-pay-btn');
-    const label = document.getElementById('kiosk-pay-label');
+    const ui    = activePayUi;
+    const btn   = document.getElementById(ui.btn);
+    const label = document.getElementById(ui.label);
     if (btn)   btn.disabled = !(kioskInfo && kioskInfo.paymentReady);
-    if (label) label.textContent = 'Pay & Print';
+    if (label) label.textContent = ui.idle;
   }
 
-  async function payAndPrint() {
-    const btn   = document.getElementById('kiosk-pay-btn');
-    const label = document.getElementById('kiosk-pay-label');
+  function payAndPrint() {
+    return startPayment({ sessionId, kind: 'print', copies, colorMode }, PRINT_UI);
+  }
+
+  function payForPlain() {
+    return startPayment({ sessionId, kind: 'plain', sheets }, PLAIN_UI);
+  }
+
+  // One payment path for every kind of order.
+  async function startPayment(order, ui) {
+    activePayUi = ui;
+    const btn   = document.getElementById(ui.btn);
+    const label = document.getElementById(ui.label);
     if (btn)   btn.disabled = true;
     if (label) label.textContent = 'Starting payment…';
 
@@ -761,10 +981,10 @@ const Mobile = (() => {
       // The server re-prices the job itself — the on-screen figure is display only.
       const jr = await fetch('/api/print-jobs', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, copies, colorMode }),
+        body: JSON.stringify(order),
       });
       const jd = await jr.json();
-      if (!jr.ok) throw new Error(jd.error || 'Could not create the print job');
+      if (!jr.ok) throw new Error(jd.error || 'Could not create the order');
       currentJob = jd.job;
 
       const or = await fetch(`/api/print-jobs/${currentJob.id}/order`, { method: 'POST' });
@@ -774,7 +994,7 @@ const Mobile = (() => {
       // Mock mode — settle directly, no gateway involved. The server only
       // honours this when it is itself running with PAYMENTS_MODE=mock.
       if (od.mock) {
-        if (!confirm(`TEST MODE — no real payment.\n\nSimulate paying ${rupees(od.amount)} and send this job to print?`)) {
+        if (!confirm(`TEST MODE — no real payment.\n\nSimulate paying ${rupees(od.amount)} for this order?`)) {
           resetPayButton();
           return;
         }
@@ -796,7 +1016,9 @@ const Mobile = (() => {
         currency: od.currency,
         order_id: od.orderId,
         name: kioskInfo.shopName || 'ZipBeam Print',
-        description: `${currentJob.totalPages} page(s) × ${currentJob.copies} copy/copies`,
+        description: currentJob.kind === 'plain'
+          ? `${currentJob.sheets} sheet(s) of plain paper`
+          : `${currentJob.totalPages} page(s) × ${currentJob.copies} copy/copies`,
         theme: { color: '#4F46E5' },
         modal: { ondismiss: resetPayButton },
         handler: async (resp) => {
@@ -826,27 +1048,42 @@ const Mobile = (() => {
   }
 
   function onPaid(job) {
-    const titleEl = document.getElementById('success-title');
-    const textEl  = document.getElementById('success-text');
-    if (titleEl) titleEl.textContent = 'Payment Successful! 🎉';
-    if (textEl) {
-      textEl.textContent =
-        `${job.totalPages} page${job.totalPages !== 1 ? 's' : ''} × ${job.copies} cop${job.copies !== 1 ? 'ies' : 'y'} sent to ${kioskInfo.shopName}. Collect your printout at the counter.`;
-    }
+    const titleEl   = document.getElementById('success-title');
+    const textEl    = document.getElementById('success-text');
     const summaryEl = document.getElementById('sent-summary');
-    if (summaryEl) {
-      summaryEl.innerHTML = job.files
-        .map(f => `<div class="sent-file"><span>📄</span><span>${escHtml(f.name)}</span></div>`)
-        .join('');
+    if (titleEl) titleEl.textContent = 'Payment Successful! 🎉';
+
+    if (job.kind === 'plain') {
+      if (textEl) {
+        textEl.textContent =
+          `${job.sheets} sheet${job.sheets !== 1 ? 's' : ''} of plain paper from ${kioskInfo.shopName}. Collect them from the printer.`;
+      }
+      if (summaryEl) {
+        summaryEl.innerHTML = `<div class="sent-file"><span>📄</span><span>Plain A4 paper × ${job.sheets}</span></div>`;
+      }
+    } else {
+      if (textEl) {
+        textEl.textContent =
+          `${job.totalPages} page${job.totalPages !== 1 ? 's' : ''} × ${job.copies} cop${job.copies !== 1 ? 'ies' : 'y'} sent to ${kioskInfo.shopName}. Collect your printout at the counter.`;
+      }
+      if (summaryEl) {
+        summaryEl.innerHTML = job.files
+          .map(f => `<div class="sent-file"><span>📄</span><span>${escHtml(f.name)}</span></div>`)
+          .join('');
+      }
     }
+
+    const again = document.getElementById('success-again-btn');
+    if (again) again.textContent = 'Start a New Order';
     showState('mobile-success');
-    Toast.success('Paid — your job is queued for printing');
+    Toast.success(job.kind === 'plain' ? 'Paid — collect your paper from the printer' : 'Paid — your job is queued for printing');
   }
 
   return {
     init, dragOver, dragLeave, drop, onFileSelect, removeFile, send, reset,
     chooseSave, choosePrint, backToChoice,
     backToUpload, setColorMode, changeCopies, payAndPrint,
+    skipIntro, kioskChoosePrint, kioskChoosePlain, backToKioskChoice, changeSheets, payForPlain,
   };
 })();
 
@@ -1017,44 +1254,66 @@ const Account = (() => {
   }
 
   // ─── ATP print rates ────────────────────────────────────────────────────────
+  // Each thing the shop sells has a price and an on/off switch.
+  const ATP_OPTIONS = [
+    { key: 'bw',    price: 'bwPerPage',     toggle: 'bwEnabled' },
+    { key: 'color', price: 'colorPerPage',  toggle: 'colorEnabled' },
+    { key: 'plain', price: 'plainPerSheet', toggle: 'plainEnabled' },
+  ];
+
+  // Dim a row whose option is switched off, so the panel reads at a glance.
+  function syncOptionRows() {
+    ATP_OPTIONS.forEach(o => {
+      const box = document.getElementById('opt-' + o.key);
+      const row = box && box.closest('.price-option');
+      if (row) row.classList.toggle('off', !box.checked);
+    });
+  }
+
   async function loadPricing() {
     try {
       const r = await fetch('/api/shop/pricing');
       if (!r.ok) return;
       const { pricing } = await r.json();
-      const bw = document.getElementById('price-bw');
-      const cl = document.getElementById('price-color');
-      if (bw) bw.value = (pricing.bwPerPage / 100);
-      if (cl) cl.value = (pricing.colorPerPage / 100);
+      ATP_OPTIONS.forEach(o => {
+        const input = document.getElementById('price-' + o.key);
+        const box   = document.getElementById('opt-' + o.key);
+        if (input) input.value = pricing[o.price] / 100;
+        if (box)   box.checked = !!pricing[o.toggle];
+      });
+      syncOptionRows();
     } catch {}
   }
 
   async function savePricing() {
-    const bwEl = document.getElementById('price-bw');
-    const clEl = document.getElementById('price-color');
     const status = document.getElementById('price-status');
-    const bwRupees = parseFloat(bwEl && bwEl.value);
-    const clRupees = parseFloat(clEl && clEl.value);
+    const fail = (msg) => {
+      if (status) { status.textContent = msg; status.className = 'price-status error'; }
+    };
 
-    if (!Number.isFinite(bwRupees) || bwRupees < 0 || !Number.isFinite(clRupees) || clRupees < 0) {
-      if (status) { status.textContent = 'Enter a valid amount for both rates.'; status.className = 'price-status error'; }
-      return;
-    }
-    try {
+    const body = {};
+    for (const o of ATP_OPTIONS) {
+      const rupeesVal = parseFloat(document.getElementById('price-' + o.key)?.value);
+      if (!Number.isFinite(rupeesVal) || rupeesVal < 0) return fail('Enter a valid price for every option.');
       // Rupees in the UI, paise on the wire — money stays integer server-side.
+      body[o.price]  = Math.round(rupeesVal * 100);
+      body[o.toggle] = !!document.getElementById('opt-' + o.key)?.checked;
+    }
+    if (!body.bwEnabled && !body.colorEnabled && !body.plainEnabled) {
+      return fail('Turn on at least one option so customers can order.');
+    }
+
+    try {
       const r = await fetch('/api/shop/pricing', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          bwPerPage:    Math.round(bwRupees * 100),
-          colorPerPage: Math.round(clRupees * 100),
-        }),
+        body: JSON.stringify(body),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'Could not save');
-      if (status) { status.textContent = 'Rates saved — new customers see these prices.'; status.className = 'price-status ok'; }
-      Toast.success('Print rates updated');
+      if (status) { status.textContent = 'Saved — customers see these options right away.'; status.className = 'price-status ok'; }
+      Toast.success('ATP options updated');
     } catch (e) {
-      if (status) { status.textContent = e.message || 'Could not save rates'; status.className = 'price-status error'; }
+      fail(e.message || 'Could not save');
     }
   }
 
@@ -1114,9 +1373,27 @@ const Account = (() => {
     } catch (e) { Toast.error(e.message); }
   }
 
-  // Turn a paid job into file rows grouped under one ATP heading.
+  // Turn a paid job into rows grouped under one ATP heading.
   function showPaidJob(job) {
-    const label = `ATP · ${job.copies} cop${job.copies !== 1 ? 'ies' : 'y'} · ₹${(job.amountPaise / 100).toLocaleString('en-IN')} paid`;
+    const paid = `₹${(job.amountPaise / 100).toLocaleString('en-IN')} paid`;
+    if (job.kind === 'plain') {
+      // Nothing to print — one row the shop ticks off once the sheets are handed over.
+      Desktop.addExternalFile({
+        id: 'plain-' + job.id,
+        jobId: job.id,
+        name: `Plain paper × ${job.sheets} sheet${job.sheets !== 1 ? 's' : ''}`,
+        size: 0,
+        mimetype: '',
+        uploadedAt: job.paidAt || Date.now(),
+        purpose: 'plain',
+        isNew: true,
+        senderId: 'atp-' + job.id,
+        senderLabel: `ATP · Plain paper · ${paid}`,
+      });
+      return;
+    }
+    const mode  = job.colorMode === 'color' ? 'Colour' : 'B&W';
+    const label = `ATP · ${mode} · ${job.copies} cop${job.copies !== 1 ? 'ies' : 'y'} · ${paid}`;
     (job.files || []).forEach(f => Desktop.addExternalFile({
       id: f.fileId,
       name: f.name,
@@ -1442,20 +1719,26 @@ const Account = (() => {
       loadRecentContacts();
     });
 
-    // A customer paid at the ATP kiosk — only now do their files reach the shop.
+    // A customer paid at the ATP kiosk — only now does their order reach the shop.
     userEventSource.addEventListener('print:paid', (e) => {
       const { job } = JSON.parse(e.data);
       showPaidJob(job);
       const amount = '₹' + (job.amountPaise / 100).toLocaleString('en-IN');
-      Toast.success(
-        `💰 Paid print job — ${job.totalPages} page${job.totalPages !== 1 ? 's' : ''} × ${job.copies} cop${job.copies !== 1 ? 'ies' : 'y'} (${amount})`
-      );
+      Toast.success(job.kind === 'plain'
+        ? `💰 Plain paper — ${job.sheets} sheet${job.sheets !== 1 ? 's' : ''} (${amount})`
+        : `💰 Paid print job — ${job.totalPages} page${job.totalPages !== 1 ? 's' : ''} × ${job.copies} cop${job.copies !== 1 ? 'ies' : 'y'} (${amount})`);
+    });
+
+    // Finished — printed by the Pi, printed here, or handed over — so clear its rows.
+    userEventSource.addEventListener('print:done', (e) => {
+      const { job } = JSON.parse(e.data);
+      Desktop.removeBySender('atp-' + job.id);
     });
   }
 
   return {
     init, toggleBar, copyMyUid, downloadMyQr, downloadKioskQr, sendToUid, savePricing,
-    pairDevice, copyDeviceToken, unpairDevice,
+    syncOptionRows, pairDevice, copyDeviceToken, unpairDevice,
   };
 })();
 

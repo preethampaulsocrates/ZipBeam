@@ -125,3 +125,7 @@ reached the agent with `journalctl -u atp-agent@$USER -f`.
 
 **Jobs paid while the Pi was off** — these are picked up automatically the next
 time the agent connects; nothing is lost.
+
+**Plain paper orders** — the agent prints one blank A4 page per sheet sold. If no
+sheets come out, turn off any "skip blank pages" option in the printer settings.
+Try it with the `PDF` printer first: each order should produce blank PDFs in `~/PDF/`.
